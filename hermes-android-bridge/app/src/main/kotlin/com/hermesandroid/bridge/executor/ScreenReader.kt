@@ -81,4 +81,50 @@ object ScreenReader {
         }
         return null
     }
+
+    fun searchNodes(textFilter: String? = null, classNameFilter: String? = null, clickableFilter: Boolean? = null, limit: Int = 20): List<Map<String, Any?>> {
+        val service = BridgeAccessibilityService.instance ?: return emptyList()
+        val results = mutableListOf<Map<String, Any?>>()
+        val roots = service.windows.mapNotNull { it.root }
+        for ((wi, root) in roots.withIndex()) {
+            searchNodesDfs(root, textFilter, classNameFilter, clickableFilter, limit, results, "$wi")
+            root.recycle()
+            if (results.size >= limit) break
+        }
+        return results
+    }
+
+    private fun searchNodesDfs(
+        node: AccessibilityNodeInfo,
+        textFilter: String?,
+        classNameFilter: String?,
+        clickableFilter: Boolean?,
+        limit: Int,
+        results: MutableList<Map<String, Any?>>,
+        path: String
+    ) {
+        if (results.size >= limit) return
+        val nodeText = node.text?.toString() ?: node.contentDescription?.toString() ?: ""
+        val nodeClass = node.className?.toString() ?: ""
+        val matches = (textFilter == null || nodeText.contains(textFilter, ignoreCase = true)) &&
+                (classNameFilter == null || nodeClass.contains(classNameFilter, ignoreCase = true)) &&
+                (clickableFilter == null || node.isClickable == clickableFilter)
+        if (matches) {
+            val r = android.graphics.Rect()
+            node.getBoundsInScreen(r)
+            results.add(mapOf(
+                "nodeId" to path,
+                "text" to node.text?.toString(),
+                "contentDescription" to node.contentDescription?.toString(),
+                "className" to nodeClass,
+                "clickable" to node.isClickable,
+                "bounds" to "${r.left},${r.top},${r.right},${r.bottom}"
+            ))
+        }
+        for (i in 0 until node.childCount) {
+            val child = node.getChild(i) ?: continue
+            searchNodesDfs(child, textFilter, classNameFilter, clickableFilter, limit, results, "$path.$i")
+            child.recycle()
+        }
+    }
 }

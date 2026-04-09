@@ -5,6 +5,8 @@ import com.hermesandroid.bridge.auth.PairingManager
 import com.hermesandroid.bridge.model.ScreenNode
 import com.hermesandroid.bridge.executor.ActionExecutor
 import com.hermesandroid.bridge.executor.ScreenReader
+import com.hermesandroid.bridge.media.ScreenRecorder
+import com.hermesandroid.bridge.event.EventStore
 import com.hermesandroid.bridge.notification.NotificationStore
 import com.hermesandroid.bridge.service.BridgeAccessibilityService
 import io.ktor.http.*
@@ -195,6 +197,33 @@ fun Application.configureRouting() {
             call.respond(result)
         }
 
+        post("/find_nodes") {
+            data class FindNodesRequest(val text: String? = null, val className: String? = null, val clickable: Boolean? = null, val limit: Int = 20)
+            val req = call.receive<FindNodesRequest>()
+            val result = withContext(Dispatchers.Main) {
+                ActionExecutor.findNodes(req.text, req.className, req.clickable, req.limit)
+            }
+            call.respond(result)
+        }
+
+        post("/diff_screen") {
+            data class DiffRequest(val previousHash: String)
+            val req = call.receive<DiffRequest>()
+            val result = withContext(Dispatchers.Main) {
+                ActionExecutor.diffScreen(req.previousHash)
+            }
+            call.respond(result)
+        }
+
+        post("/pinch") {
+            data class PinchRequest(val x: Int, val y: Int, val scale: Float = 1.5f, val duration: Long = 300)
+            val req = call.receive<PinchRequest>()
+            val result = withContext(Dispatchers.Main) {
+                ActionExecutor.pinch(req.x, req.y, req.scale, req.duration)
+            }
+            call.respond(result)
+        }
+
         get("/screen_hash") {
             val result = withContext(Dispatchers.Main) {
                 ActionExecutor.screenHash()
@@ -218,6 +247,83 @@ fun Application.configureRouting() {
             data class CallRequest(val number: String)
             val req = call.receive<CallRequest>()
             val result = ActionExecutor.makeCall(req.number)
+            call.respond(result)
+        }
+
+        post("/media") {
+            data class MediaRequest(val action: String)
+            val req = call.receive<MediaRequest>()
+            val result = ActionExecutor.mediaControl(req.action)
+            call.respond(result)
+        }
+
+        get("/contacts") {
+            val query = call.request.queryParameters["query"] ?: ""
+            val limit = call.request.queryParameters["limit"]?.toIntOrNull() ?: 20
+            val result = ActionExecutor.searchContacts(query, limit)
+            call.respond(result)
+        }
+
+        post("/intent") {
+            data class IntentRequest(val action: String, val dataUri: String? = null, val extras: Map<String, String>? = null, val packageOverride: String? = null)
+            val req = call.receive<IntentRequest>()
+            val result = ActionExecutor.sendIntent(req.action, req.dataUri, req.extras, req.packageOverride)
+            call.respond(result)
+        }
+
+        get("/events") {
+            val limit = call.request.queryParameters["limit"]?.toIntOrNull() ?: 50
+            val since = call.request.queryParameters["since"]?.toLongOrNull() ?: 0L
+            val entries = if (since > 0) {
+                EventStore.getSince(since, limit)
+            } else {
+                EventStore.getAll(limit)
+            }
+            val mapped = entries.map { EventStore.toMap(it) }
+            call.respond(mapOf(
+                "events" to mapped,
+                "count" to mapped.size,
+                "streaming" to EventStore.streamingEnabled
+            ))
+        }
+
+        post("/events/stream") {
+            data class StreamRequest(val enabled: Boolean)
+            val req = call.receive<StreamRequest>()
+            EventStore.setStreaming(req.enabled)
+            call.respond(mapOf("success" to true, "streaming" to req.enabled))
+        }
+
+        post("/broadcast") {
+            data class BroadcastRequest(val action: String, val extras: Map<String, String>? = null)
+            val req = call.receive<BroadcastRequest>()
+            val result = ActionExecutor.sendBroadcast(req.action, req.extras)
+            call.respond(result)
+        }
+
+        post("/screen_record") {
+            data class RecordRequest(val durationMs: Long = 5000)
+            val req = call.receive<RecordRequest>()
+            val result = ScreenRecorder.record(req.durationMs)
+            call.respond(result)
+        }
+
+        get("/widgets") {
+            val result = withContext(Dispatchers.Main) {
+                ActionExecutor.readWidgets()
+            }
+            call.respond(result)
+        }
+
+        post("/speak") {
+            data class SpeakRequest(val text: String, val queue: Int = 1)
+            val req = call.receive<SpeakRequest>()
+            val result = ActionExecutor.speak(req.text, req.queue)
+            call.respond(result)
+        }
+
+        post("/stop_speaking") {
+            val result = ActionExecutor.stopSpeaking()
             call.respond(result)
         }
     }

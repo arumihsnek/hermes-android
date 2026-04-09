@@ -30,17 +30,25 @@ from tools.android_tool import (
     android_location,
     android_send_sms,
     android_call,
+    android_events,
+    android_event_stream,
+    android_screen_record,
+    android_read_widgets,
+    android_media,
+    android_search_contacts,
+    android_send_intent,
+    android_broadcast,
     _SCHEMAS,
     _HANDLERS,
 )
 
 
 class TestSchemas:
-    def test_all_25_tools_have_schemas(self):
-        assert len(_SCHEMAS) == 25
+    def test_all_38_tools_have_schemas(self):
+        assert len(_SCHEMAS) == 38
 
-    def test_all_25_tools_have_handlers(self):
-        assert len(_HANDLERS) == 25
+    def test_all_38_tools_have_handlers(self):
+        assert len(_HANDLERS) == 38
 
     def test_schema_names_match_handler_names(self):
         assert set(_SCHEMAS.keys()) == set(_HANDLERS.keys())
@@ -672,4 +680,282 @@ class TestCall:
             responses.POST, f"{bridge_url}/call", body=ConnectionError("refused")
         )
         result = json.loads(android_call("+1234567890"))
+        assert "error" in result
+
+
+class TestEvents:
+    @responses.activate
+    def test_events(self, bridge_url):
+        responses.add(
+            responses.GET,
+            f"{bridge_url}/events",
+            json={
+                "events": [
+                    {
+                        "eventType": "VIEW_CLICKED",
+                        "text": "OK",
+                        "packageName": "com.example",
+                        "timestamp": 1700000000000,
+                    },
+                    {
+                        "eventType": "WINDOW_STATE_CHANGED",
+                        "className": "MainActivity",
+                        "timestamp": 1700000001000,
+                    },
+                ],
+                "count": 2,
+                "streaming": True,
+            },
+        )
+        result = json.loads(android_events())
+        assert result["count"] == 2
+        assert result["events"][0]["eventType"] == "VIEW_CLICKED"
+
+    @responses.activate
+    def test_events_with_since(self, bridge_url):
+        responses.add(
+            responses.GET,
+            f"{bridge_url}/events",
+            json={"events": [], "count": 0, "streaming": False},
+        )
+        result = json.loads(android_events(since=1700000000000))
+        assert result["count"] == 0
+
+    @responses.activate
+    def test_events_failure(self, bridge_url):
+        responses.add(
+            responses.GET, f"{bridge_url}/events", body=ConnectionError("refused")
+        )
+        result = json.loads(android_events())
+        assert "error" in result
+
+
+class TestEventStream:
+    @responses.activate
+    def test_enable_stream(self, bridge_url):
+        responses.add(
+            responses.POST,
+            f"{bridge_url}/events/stream",
+            json={"success": True, "streaming": True},
+        )
+        result = json.loads(android_event_stream(True))
+        assert result["streaming"] is True
+
+    @responses.activate
+    def test_disable_stream(self, bridge_url):
+        responses.add(
+            responses.POST,
+            f"{bridge_url}/events/stream",
+            json={"success": True, "streaming": False},
+        )
+        result = json.loads(android_event_stream(False))
+        assert result["streaming"] is False
+
+    @responses.activate
+    def test_stream_failure(self, bridge_url):
+        responses.add(
+            responses.POST,
+            f"{bridge_url}/events/stream",
+            body=ConnectionError("refused"),
+        )
+        result = json.loads(android_event_stream(True))
+        assert "error" in result
+
+
+class TestScreenRecord:
+    @responses.activate
+    def test_screen_record(self, bridge_url):
+        import base64
+
+        fake_video = base64.b64encode(b"\x00\x00\x00\x18ftypmp42").decode()
+        responses.add(
+            responses.POST,
+            f"{bridge_url}/screen_record",
+            json={
+                "success": True,
+                "data": {
+                    "video": fake_video,
+                    "width": 1080,
+                    "height": 1920,
+                    "durationMs": 5000,
+                    "mimeType": "video/mp4",
+                },
+            },
+        )
+        result = android_screen_record()
+        assert "Screen recorded" in result
+
+    @responses.activate
+    def test_screen_record_custom_duration(self, bridge_url):
+        import base64
+
+        fake_video = base64.b64encode(b"fake").decode()
+        responses.add(
+            responses.POST,
+            f"{bridge_url}/screen_record",
+            json={
+                "success": True,
+                "data": {
+                    "video": fake_video,
+                    "width": 1080,
+                    "height": 1920,
+                    "durationMs": 10000,
+                },
+            },
+        )
+        result = android_screen_record(duration_ms=10000)
+        assert "Screen recorded" in result
+
+    @responses.activate
+    def test_screen_record_failure(self, bridge_url):
+        responses.add(
+            responses.POST,
+            f"{bridge_url}/screen_record",
+            body=ConnectionError("refused"),
+        )
+        result = json.loads(android_screen_record())
+        assert "error" in result
+
+
+class TestReadWidgets:
+    @responses.activate
+    def test_read_widgets(self, bridge_url):
+        responses.add(
+            responses.GET,
+            f"{bridge_url}/widgets",
+            json={
+                "success": True,
+                "data": {
+                    "widgets": [{"text": "72°F", "className": "WeatherWidget"}],
+                    "count": 1,
+                },
+            },
+        )
+        result = json.loads(android_read_widgets())
+        assert result["success"] is True
+
+    @responses.activate
+    def test_read_widgets_failure(self, bridge_url):
+        responses.add(
+            responses.GET, f"{bridge_url}/widgets", body=ConnectionError("refused")
+        )
+        result = json.loads(android_read_widgets())
+        assert "error" in result
+
+
+class TestMedia:
+    @responses.activate
+    def test_media_toggle(self, bridge_url):
+        responses.add(
+            responses.POST,
+            f"{bridge_url}/media",
+            json={"success": True, "message": "Media toggle sent"},
+        )
+        result = json.loads(android_media("toggle"))
+        assert result["success"] is True
+
+    @responses.activate
+    def test_media_next(self, bridge_url):
+        responses.add(responses.POST, f"{bridge_url}/media", json={"success": True})
+        result = json.loads(android_media("next"))
+        assert result["success"] is True
+
+    @responses.activate
+    def test_media_failure(self, bridge_url):
+        responses.add(
+            responses.POST, f"{bridge_url}/media", body=ConnectionError("refused")
+        )
+        result = json.loads(android_media("play"))
+        assert "error" in result
+
+
+class TestSearchContacts:
+    @responses.activate
+    def test_search_contacts(self, bridge_url):
+        responses.add(
+            responses.GET,
+            f"{bridge_url}/contacts",
+            json={
+                "success": True,
+                "data": {
+                    "contacts": [{"name": "John", "phones": "+1234567890"}],
+                    "count": 1,
+                },
+            },
+        )
+        result = json.loads(android_search_contacts("John"))
+        assert result["success"] is True
+        assert result["data"]["count"] == 1
+
+    @responses.activate
+    def test_search_contacts_not_found(self, bridge_url):
+        responses.add(
+            responses.GET,
+            f"{bridge_url}/contacts",
+            json={"success": False, "message": "No contacts found matching 'zzz'"},
+        )
+        result = json.loads(android_search_contacts("zzz"))
+        assert result["success"] is False
+
+    @responses.activate
+    def test_search_contacts_failure(self, bridge_url):
+        responses.add(
+            responses.GET, f"{bridge_url}/contacts", body=ConnectionError("refused")
+        )
+        result = json.loads(android_search_contacts("test"))
+        assert "error" in result
+
+
+class TestSendIntent:
+    @responses.activate
+    def test_send_intent(self, bridge_url):
+        responses.add(
+            responses.POST,
+            f"{bridge_url}/intent",
+            json={
+                "success": True,
+                "message": "Intent sent: android.settings.WIFI_SETTINGS",
+            },
+        )
+        result = json.loads(android_send_intent("android.settings.WIFI_SETTINGS"))
+        assert result["success"] is True
+
+    @responses.activate
+    def test_send_intent_with_extras(self, bridge_url):
+        responses.add(responses.POST, f"{bridge_url}/intent", json={"success": True})
+        result = json.loads(
+            android_send_intent(
+                "android.intent.action.VIEW",
+                data_uri="https://example.com",
+                extras={"key": "value"},
+            )
+        )
+        assert result["success"] is True
+
+    @responses.activate
+    def test_send_intent_failure(self, bridge_url):
+        responses.add(
+            responses.POST, f"{bridge_url}/intent", body=ConnectionError("refused")
+        )
+        result = json.loads(android_send_intent("test"))
+        assert "error" in result
+
+
+class TestBroadcast:
+    @responses.activate
+    def test_broadcast(self, bridge_url):
+        responses.add(
+            responses.POST,
+            f"{bridge_url}/broadcast",
+            json={"success": True, "message": "Broadcast sent: test.ACTION"},
+        )
+        result = json.loads(android_broadcast("test.ACTION"))
+        assert result["success"] is True
+
+    @responses.activate
+    def test_broadcast_failure(self, bridge_url):
+        responses.add(
+            responses.POST, f"{bridge_url}/broadcast", body=ConnectionError("refused")
+        )
+        result = json.loads(android_broadcast("test"))
         assert "error" in result

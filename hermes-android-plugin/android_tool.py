@@ -1,5 +1,5 @@
 """
-hermes-android tool — 25 android_* tool handlers + schemas.
+hermes-android tool — 38 android_* tool handlers + schemas.
 
 NOTE: This file must be kept in sync with tools/android_tool.py.
       The only difference is the import path for android_relay (see android_setup).
@@ -483,6 +483,156 @@ def android_call(number: str) -> str:
     """
     try:
         data = _post("/call", {"number": number})
+        return json.dumps(data)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+def android_speak(text: str, flush: bool = False) -> str:
+    """
+    Speak text aloud through the phone's speaker using text-to-speech.
+    Use flush=True to interrupt current speech and speak immediately.
+    """
+    try:
+        data = _post("/speak", {"text": text, "queue": 0 if flush else 1})
+        return json.dumps(data)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+def android_speak_stop() -> str:
+    """Stop any ongoing text-to-speech on the phone."""
+    try:
+        data = _post("/stop_speaking", {})
+        return json.dumps(data)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+def android_events(limit: int = 50, since: int = 0) -> str:
+    """
+    Read recent accessibility events from the phone in real-time.
+    Events include clicks, text changes, window transitions, scrolls, etc.
+    Use since (unix ms) to get only events after a given time.
+    Useful for detecting what the user is doing or what changed.
+    """
+    try:
+        data = _get(f"/events?limit={limit}&since={since}")
+        return json.dumps(data)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+def android_event_stream(enabled: bool = True) -> str:
+    """
+    Enable or disable real-time accessibility event streaming.
+    When enabled, events are captured and stored for retrieval via android_events.
+    Disable to stop capturing and clear the event buffer.
+    """
+    try:
+        data = _post("/events/stream", {"enabled": enabled})
+        return json.dumps(data)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+def android_screen_record(duration_ms: int = 5000) -> str:
+    """
+    Record a short video clip of the Android screen (default 5 seconds).
+    Requires MediaProjection permission (granted via prompt on first use).
+    Returns base64-encoded MP4 video. Save to file for playback.
+    """
+    try:
+        import base64
+        import tempfile
+
+        data = _post("/screen_record", {"durationMs": duration_ms})
+        if isinstance(data, dict) and data.get("success") and "data" in data:
+            video_data = data["data"]
+            video_b64 = video_data.get("video", "")
+            if video_b64:
+                video_bytes = base64.b64decode(video_b64)
+                tmp = tempfile.NamedTemporaryFile(
+                    suffix=".mp4", prefix="android_record_", delete=False
+                )
+                tmp.write(video_bytes)
+                tmp.close()
+                w = video_data.get("width", "?")
+                h = video_data.get("height", "?")
+                return f"Screen recorded ({w}x{h}, {duration_ms}ms)\nMEDIA:{tmp.name}"
+        return json.dumps(data)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+def android_read_widgets() -> str:
+    """
+    Read home screen widgets (weather, calendar, tasks, etc.) without
+    opening apps. Goes to home screen first, then reads widget content.
+    """
+    try:
+        data = _get("/widgets")
+        return json.dumps(data)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+def android_media(action: str) -> str:
+    """
+    Control media playback on the phone. More reliable than tapping media app UI.
+    Actions: play, pause, toggle (play/pause), next, previous.
+    """
+    try:
+        data = _post("/media", {"action": action})
+        return json.dumps(data)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+def android_search_contacts(query: str, limit: int = 20) -> str:
+    """
+    Search the phone's contacts by name. Returns name and phone numbers.
+    Useful for finding numbers to call or send SMS to.
+    """
+    try:
+        data = _get(f"/contacts?query={query}&limit={limit}")
+        return json.dumps(data)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+def android_send_intent(
+    action: str, data_uri: str = None, extras: dict = None, package: str = None
+) -> str:
+    """
+    Send an Android intent to start an activity. Opens up deep linking,
+    setting toggles, and app-specific APIs.
+    Example: android_send_intent("android.settings.WIFI_SETTINGS")
+    """
+    try:
+        payload = {"action": action}
+        if data_uri:
+            payload["dataUri"] = data_uri
+        if extras:
+            payload["extras"] = extras
+        if package:
+            payload["packageOverride"] = package
+        data = _post("/intent", payload)
+        return json.dumps(data)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+def android_broadcast(action: str, extras: dict = None) -> str:
+    """
+    Send an Android broadcast intent. Useful for triggering system events
+    or app-specific receivers.
+    """
+    try:
+        payload = {"action": action}
+        if extras:
+            payload["extras"] = extras
+        data = _post("/broadcast", payload)
         return json.dumps(data)
     except Exception as e:
         return json.dumps({"error": str(e)})
@@ -974,6 +1124,157 @@ _SCHEMAS = {
             "required": ["number"],
         },
     },
+    "android_speak": {
+        "name": "android_speak",
+        "description": "Speak text aloud through the phone speaker using text-to-speech. Useful for voice feedback, reading messages aloud, or agent personality.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "text": {"type": "string", "description": "Text to speak aloud"},
+                "flush": {
+                    "type": "boolean",
+                    "description": "Interrupt current speech and speak immediately (default false)",
+                    "default": False,
+                },
+            },
+            "required": ["text"],
+        },
+    },
+    "android_speak_stop": {
+        "name": "android_speak_stop",
+        "description": "Stop any ongoing text-to-speech playback on the phone.",
+        "parameters": {"type": "object", "properties": {}, "required": []},
+    },
+    "android_events": {
+        "name": "android_events",
+        "description": "Read recent accessibility events (clicks, text changes, window transitions, scrolls) from the phone. Real-time UI change detection.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "limit": {
+                    "type": "integer",
+                    "description": "Max events to return (default 50)",
+                    "default": 50,
+                },
+                "since": {
+                    "type": "integer",
+                    "description": "Only events after this Unix timestamp in ms (default 0 = all)",
+                    "default": 0,
+                },
+            },
+            "required": [],
+        },
+    },
+    "android_event_stream": {
+        "name": "android_event_stream",
+        "description": "Enable/disable accessibility event streaming. When enabled, events are captured for retrieval via android_events.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "enabled": {
+                    "type": "boolean",
+                    "description": "Enable (true) or disable (false) event streaming",
+                    "default": True,
+                },
+            },
+            "required": [],
+        },
+    },
+    "android_screen_record": {
+        "name": "android_screen_record",
+        "description": "Record a short video clip of the Android screen (default 5 seconds). Returns MP4 video file. Useful for animated UIs, debugging, and demos.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "duration_ms": {
+                    "type": "integer",
+                    "description": "Recording duration in milliseconds (default 5000)",
+                    "default": 5000,
+                },
+            },
+            "required": [],
+        },
+    },
+    "android_read_widgets": {
+        "name": "android_read_widgets",
+        "description": "Read home screen widgets (weather, calendar, tasks, etc.). Goes to home screen and reads widget content without opening apps.",
+        "parameters": {"type": "object", "properties": {}, "required": []},
+    },
+    "android_media": {
+        "name": "android_media",
+        "description": "Control media playback (play, pause, toggle, next, previous). Works system-wide without opening media apps.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string",
+                    "enum": ["play", "pause", "toggle", "next", "previous"],
+                    "description": "Media action",
+                },
+            },
+            "required": ["action"],
+        },
+    },
+    "android_search_contacts": {
+        "name": "android_search_contacts",
+        "description": "Search phone contacts by name. Returns contact names and phone numbers. Use before android_call or android_send_sms.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "Name to search for"},
+                "limit": {
+                    "type": "integer",
+                    "description": "Max results (default 20)",
+                    "default": 20,
+                },
+            },
+            "required": ["query"],
+        },
+    },
+    "android_send_intent": {
+        "name": "android_send_intent",
+        "description": "Send an Android intent to start an activity. Enables deep linking, settings, and app-specific APIs.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string",
+                    "description": "Intent action e.g. android.settings.WIFI_SETTINGS",
+                },
+                "data_uri": {
+                    "type": "string",
+                    "description": "Optional data URI e.g. tel:+1234567890",
+                },
+                "extras": {
+                    "type": "object",
+                    "description": "Optional string extras as key-value pairs",
+                },
+                "package": {
+                    "type": "string",
+                    "description": "Optional target package name",
+                },
+            },
+            "required": ["action"],
+        },
+    },
+    "android_broadcast": {
+        "name": "android_broadcast",
+        "description": "Send an Android broadcast intent. Triggers system events or app-specific receivers.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string",
+                    "description": "Broadcast action e.g. android.intent.action.AIRPLANE_MODE",
+                },
+                "extras": {
+                    "type": "object",
+                    "description": "Optional string extras as key-value pairs",
+                },
+            },
+            "required": ["action"],
+        },
+    },
 }
 
 # ── Tool handlers map ──────────────────────────────────────────────────────────
@@ -1004,4 +1305,14 @@ _HANDLERS = {
     "android_location": lambda args, **kw: android_location(),
     "android_send_sms": lambda args, **kw: android_send_sms(**args),
     "android_call": lambda args, **kw: android_call(**args),
+    "android_speak": lambda args, **kw: android_speak(**args),
+    "android_speak_stop": lambda args, **kw: android_speak_stop(),
+    "android_events": lambda args, **kw: android_events(**args),
+    "android_event_stream": lambda args, **kw: android_event_stream(**args),
+    "android_screen_record": lambda args, **kw: android_screen_record(**args),
+    "android_read_widgets": lambda args, **kw: android_read_widgets(),
+    "android_media": lambda args, **kw: android_media(**args),
+    "android_search_contacts": lambda args, **kw: android_search_contacts(**args),
+    "android_send_intent": lambda args, **kw: android_send_intent(**args),
+    "android_broadcast": lambda args, **kw: android_broadcast(**args),
 }

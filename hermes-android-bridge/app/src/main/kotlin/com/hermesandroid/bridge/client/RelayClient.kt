@@ -7,8 +7,10 @@ import com.google.gson.Gson
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import com.hermesandroid.bridge.executor.ActionExecutor
+import com.hermesandroid.bridge.media.ScreenRecorder
 import com.hermesandroid.bridge.model.ScreenNode
 import com.hermesandroid.bridge.executor.ScreenReader
+import com.hermesandroid.bridge.event.EventStore
 import com.hermesandroid.bridge.notification.NotificationStore
 import com.hermesandroid.bridge.service.BridgeAccessibilityService
 import com.hermesandroid.bridge.service.BridgeNotificationListener
@@ -396,6 +398,32 @@ object RelayClient {
                 result to 200
             }
 
+            method == "POST" && path == "/find_nodes" -> {
+                val text = body.get("text")?.asString
+                val className = body.get("className")?.asString
+                val clickable = body.get("clickable")?.asBoolean
+                val limit = body.get("limit")?.asInt ?: 20
+                val result = ActionExecutor.findNodes(text, className, clickable, limit)
+                result to 200
+            }
+
+            method == "POST" && path == "/diff_screen" -> {
+                val previousHash = body.get("previousHash")?.asString ?: ""
+                val result = ActionExecutor.diffScreen(previousHash)
+                result to 200
+            }
+
+            method == "POST" && path == "/pinch" -> {
+                val x = body.get("x")?.asInt ?: 0
+                val y = body.get("y")?.asInt ?: 0
+                val scale = body.get("scale")?.asFloat ?: 1.5f
+                val duration = body.get("duration")?.asLong ?: 300L
+                val result = withContext(Dispatchers.Main) {
+                    ActionExecutor.pinch(x, y, scale, duration)
+                }
+                result to 200
+            }
+
             method == "GET" && path == "/screen_hash" -> {
                 val result = ActionExecutor.screenHash()
                 result to 200
@@ -416,6 +444,86 @@ object RelayClient {
             method == "POST" && path == "/call" -> {
                 val number = body.get("number")?.asString ?: ""
                 val result = ActionExecutor.makeCall(number)
+                result to 200
+            }
+
+            method == "POST" && path == "/media" -> {
+                val action = body.get("action")?.asString ?: ""
+                val result = ActionExecutor.mediaControl(action)
+                result to 200
+            }
+
+            method == "GET" && path == "/events" -> {
+                val limit = params.get("limit")?.asString?.toIntOrNull() ?: 50
+                val since = params.get("since")?.asString?.toLongOrNull() ?: 0L
+                val entries = if (since > 0) {
+                    EventStore.getSince(since, limit)
+                } else {
+                    EventStore.getAll(limit)
+                }
+                val mapped = entries.map { EventStore.toMap(it) }
+                mapOf("events" to mapped, "count" to mapped.size, "streaming" to EventStore.streamingEnabled) to 200
+            }
+
+            method == "POST" && path == "/events/stream" -> {
+                val enabled = body.get("enabled")?.asBoolean ?: false
+                EventStore.setStreaming(enabled)
+                mapOf("success" to true, "streaming" to enabled) to 200
+            }
+
+            method == "GET" && path == "/contacts" -> {
+                val query = params.get("query")?.asString ?: ""
+                val limit = params.get("limit")?.asString?.toIntOrNull() ?: 20
+                val result = ActionExecutor.searchContacts(query, limit)
+                result to 200
+            }
+
+            method == "POST" && path == "/intent" -> {
+                val action = body.get("action")?.asString ?: ""
+                val dataUri = body.get("dataUri")?.asString
+                val extrasObj = body.get("extras")?.asJsonObject
+                val extras = extrasObj?.let { obj ->
+                    val map = mutableMapOf<String, String>()
+                    obj.entrySet().forEach { (k, v) -> map[k] = v.asString }
+                    map
+                }
+                val packageOverride = body.get("packageOverride")?.asString
+                val result = ActionExecutor.sendIntent(action, dataUri, extras, packageOverride)
+                result to 200
+            }
+
+            method == "POST" && path == "/broadcast" -> {
+                val action = body.get("action")?.asString ?: ""
+                val extrasObj = body.get("extras")?.asJsonObject
+                val extras = extrasObj?.let { obj ->
+                    val map = mutableMapOf<String, String>()
+                    obj.entrySet().forEach { (k, v) -> map[k] = v.asString }
+                    map
+                }
+                val result = ActionExecutor.sendBroadcast(action, extras)
+                result to 200
+            }
+
+            method == "POST" && path == "/speak" -> {
+                val text = body.get("text")?.asString ?: ""
+                val queue = body.get("queue")?.asInt ?: 1
+                val result = ActionExecutor.speak(text, queue)
+                result to 200
+            }
+
+            method == "POST" && path == "/stop_speaking" -> {
+                val result = ActionExecutor.stopSpeaking()
+                result to 200
+            }
+
+            method == "POST" && path == "/screen_record" -> {
+                val durationMs = body.get("durationMs")?.asLong ?: 5000L
+                val result = ScreenRecorder.record(durationMs)
+                result to 200
+            }
+
+            method == "GET" && path == "/widgets" -> {
+                val result = ActionExecutor.readWidgets()
                 result to 200
             }
 

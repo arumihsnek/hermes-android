@@ -26,7 +26,9 @@ class BridgeAccessibilityService : AccessibilityService() {
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        // No-op — we read state on demand, not event-driven
+        if (event != null) {
+            com.hermesandroid.bridge.event.EventStore.add(event)
+        }
     }
 
     private var isForeground = false
