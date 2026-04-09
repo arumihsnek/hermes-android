@@ -20,6 +20,9 @@ Command JSON format:
   Phone -> Relay:  {"request_id": "uuid", "result": {...}, "status": 200}
 """
 
+# TLS: Set ANDROID_RELAY_CERT and ANDROID_RELAY_KEY to PEM file paths
+# to enable wss:// connections. Without these, the relay uses plaintext http.
+
 import asyncio
 import json
 import logging
@@ -70,6 +73,7 @@ class _RelayState:
 
 # ── Public API (called from sync code) ────────────────────────────────────────
 
+
 def start_relay(pairing_code: str, port: int = 0) -> None:
     """Start the relay in a background thread.  No-op if already running."""
     global _relay_instance
@@ -77,7 +81,11 @@ def start_relay(pairing_code: str, port: int = 0) -> None:
         port = int(os.getenv("ANDROID_RELAY_PORT", "8766"))
 
     with _relay_lock:
-        if _relay_instance is not None and _relay_instance.thread is not None and _relay_instance.thread.is_alive():
+        if (
+            _relay_instance is not None
+            and _relay_instance.thread is not None
+            and _relay_instance.thread.is_alive()
+        ):
             logger.info("Relay already running on port %d", _relay_instance.port)
             return
 
@@ -85,7 +93,9 @@ def start_relay(pairing_code: str, port: int = 0) -> None:
         _relay_instance = state
 
         ready = threading.Event()
-        t = threading.Thread(target=_run_loop, args=(state, ready), daemon=True, name="android-relay")
+        t = threading.Thread(
+            target=_run_loop, args=(state, ready), daemon=True, name="android-relay"
+        )
         state.thread = t
         t.start()
         # Wait until the server is actually listening (up to 10 s)
@@ -145,6 +155,7 @@ def set_pairing_code(code: str) -> None:
 
 # ── Background event-loop entry point ─────────────────────────────────────────
 
+
 def _run_loop(state: _RelayState, ready: threading.Event) -> None:
     """Runs in the background thread — creates an event loop and serves."""
     loop = asyncio.new_event_loop()
@@ -163,6 +174,21 @@ def _run_loop(state: _RelayState, ready: threading.Event) -> None:
         loop.close()
 
 
+def _ssl_context() -> Optional["ssl.SSLContext"]:
+    """Build SSL context from env vars if configured."""
+    import ssl as _ssl
+
+    cert_path = os.getenv("ANDROID_RELAY_CERT")
+    key_path = os.getenv("ANDROID_RELAY_KEY")
+
+    if not cert_path or not key_path:
+        return None
+
+    ctx = _ssl.SSLContext(_ssl.PROTOCOL_TLS_SERVER)
+    ctx.load_cert_chain(cert_path, key_path)
+    return ctx
+
+
 async def _serve(state: _RelayState, ready: threading.Event) -> None:
     """Build the aiohttp app, start the site, and block until shutdown."""
     app = web.Application()
@@ -176,18 +202,29 @@ async def _serve(state: _RelayState, ready: threading.Event) -> None:
         app.router.add_get(path, lambda req, p=path: _handle_http(req, state, p))
 
     # HTTP bridge endpoints (POST)
-    for path in ("/tap", "/tap_text", "/type", "/swipe", "/open_app", "/press_key", "/scroll", "/wait"):
+    for path in (
+        "/tap",
+        "/tap_text",
+        "/type",
+        "/swipe",
+        "/open_app",
+        "/press_key",
+        "/scroll",
+        "/wait",
+    ):
         app.router.add_post(path, lambda req, p=path: _handle_http(req, state, p))
 
     runner = web.AppRunner(app)
     state.runner = runner
     await runner.setup()
 
-    site = web.TCPSite(runner, "0.0.0.0", state.port)
+    ssl_ctx = _ssl_context()
+    site = web.TCPSite(runner, "0.0.0.0", state.port, ssl_context=ssl_ctx)
     state.site = site
     await site.start()
 
-    logger.info("Relay listening on 0.0.0.0:%d", state.port)
+    scheme = "https" if ssl_ctx else "http"
+    logger.info("Relay listening on %s://0.0.0.0:%d", scheme, state.port)
     ready.set()
 
     # Block until shutdown is signalled
@@ -201,9 +238,9 @@ async def _serve(state: _RelayState, ready: threading.Event) -> None:
 
 # ── Rate limiting for WebSocket auth ─────────────────────────────────────────
 
-_AUTH_MAX_ATTEMPTS = 5        # max failed attempts before blocking
-_AUTH_WINDOW_SECONDS = 60     # sliding window for counting failures
-_AUTH_BLOCK_SECONDS = 300     # how long to block an IP (5 minutes)
+_AUTH_MAX_ATTEMPTS = 5  # max failed attempts before blocking
+_AUTH_WINDOW_SECONDS = 60  # sliding window for counting failures
+_AUTH_BLOCK_SECONDS = 300  # how long to block an IP (5 minutes)
 _AUTH_CLEANUP_INTERVAL = 120  # seconds between cleanup sweeps
 
 # {ip: [timestamp, timestamp, ...]} — tracks failed auth attempt times per IP
@@ -267,23 +304,30 @@ def _auth_record_failure(ip: str) -> None:
             _auth_failures.pop(ip, None)
             logger.warning(
                 "IP %s blocked for %ds after %d failed auth attempts",
-                ip, _AUTH_BLOCK_SECONDS, _AUTH_MAX_ATTEMPTS,
+                ip,
+                _AUTH_BLOCK_SECONDS,
+                _AUTH_MAX_ATTEMPTS,
             )
 
 
 # ── WebSocket handler (phone side) ───────────────────────────────────────────
+
 
 async def _handle_ws(request: web.Request, state: _RelayState) -> web.WebSocketResponse:
     # Rate limiting — check before token validation
     remote_ip = request.remote or "unknown"
     if _auth_is_blocked(remote_ip):
         logger.warning("Auth attempt from blocked IP %s — returning 429", remote_ip)
-        raise web.HTTPTooManyRequests(text="Too many failed authentication attempts. Try again later.")
+        raise web.HTTPTooManyRequests(
+            text="Too many failed authentication attempts. Try again later."
+        )
 
     token = request.query.get("token", "")
     if token.upper() != state.pairing_code.upper():
         _auth_record_failure(remote_ip)
-        logger.warning("Phone WS rejected — bad token (got %s) from %s", token, remote_ip)
+        logger.warning(
+            "Phone WS rejected — bad token (got %s) from %s", token, remote_ip
+        )
         raise web.HTTPForbidden(text="Invalid pairing code")
 
     ws = web.WebSocketResponse(heartbeat=15.0)
@@ -293,7 +337,9 @@ async def _handle_ws(request: web.Request, state: _RelayState) -> web.WebSocketR
     async with state.phone_ws_lock:
         if state.phone_ws is not None and not state.phone_ws.closed:
             logger.info("Replacing previous phone connection")
-            await state.phone_ws.close(code=aiohttp.WSCloseCode.GOING_AWAY, message=b"replaced")
+            await state.phone_ws.close(
+                code=aiohttp.WSCloseCode.GOING_AWAY, message=b"replaced"
+            )
         state.phone_ws = ws
 
     logger.info("Phone connected from %s", request.remote)
@@ -328,7 +374,9 @@ async def _on_phone_message(state: _RelayState, raw: str) -> None:
         future = state.pending.pop(request_id, None)
 
     if future is None:
-        logger.debug("No pending future for request_id=%s (possibly timed out)", request_id)
+        logger.debug(
+            "No pending future for request_id=%s (possibly timed out)", request_id
+        )
         return
 
     if not future.done():
@@ -361,14 +409,20 @@ async def _cleanup_phone(state: _RelayState, reason: str = "") -> None:
 
 _RESPONSE_TIMEOUT = 30  # seconds
 
-async def _handle_http(request: web.Request, state: _RelayState, path: str) -> web.Response:
+
+async def _handle_http(
+    request: web.Request, state: _RelayState, path: str
+) -> web.Response:
     """Forward an HTTP request from a tool to the phone over WebSocket."""
-    ws = state.phone_ws
-    if ws is None or ws.closed:
-        return web.json_response(
-            {"error": "No phone connected. Open the Hermes app on your phone and connect."},
-            status=503,
-        )
+    async with state.phone_ws_lock:
+        ws = state.phone_ws
+        if ws is None or ws.closed:
+            return web.json_response(
+                {
+                    "error": "No phone connected. Open the Hermes app on your phone and connect."
+                },
+                status=503,
+            )
 
     # Build the command envelope
     request_id = str(uuid.uuid4())
@@ -413,7 +467,12 @@ async def _handle_http(request: web.Request, state: _RelayState, path: str) -> w
     except asyncio.TimeoutError:
         async with state.pending_lock:
             state.pending.pop(request_id, None)
-        logger.warning("Phone did not respond within %ds for %s %s", _RESPONSE_TIMEOUT, method, path)
+        logger.warning(
+            "Phone did not respond within %ds for %s %s",
+            _RESPONSE_TIMEOUT,
+            method,
+            path,
+        )
         return web.json_response(
             {"error": f"Phone did not respond within {_RESPONSE_TIMEOUT}s"},
             status=504,

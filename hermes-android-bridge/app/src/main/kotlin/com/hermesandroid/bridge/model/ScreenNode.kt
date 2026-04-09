@@ -20,6 +20,12 @@ data class NodeBounds(val left: Int, val top: Int, val right: Int, val bottom: I
     val centerY: Int get() = (top + bottom) / 2
 }
 
+fun ScreenNode.computeHash(): String {
+    val childHashes = children.joinToString(",") { it.computeHash() }
+    val raw = "$nodeId|$text|$contentDescription|$className|$clickable|$focusable|$scrollable|$editable|$checked|$childHashes"
+    return Integer.toHexString(raw.hashCode())
+}
+
 data class ActionResult(
     val success: Boolean,
     val message: String = "",

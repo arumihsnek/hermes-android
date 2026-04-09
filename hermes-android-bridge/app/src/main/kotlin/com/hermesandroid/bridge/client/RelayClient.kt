@@ -7,8 +7,11 @@ import com.google.gson.Gson
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import com.hermesandroid.bridge.executor.ActionExecutor
+import com.hermesandroid.bridge.model.ScreenNode
 import com.hermesandroid.bridge.executor.ScreenReader
+import com.hermesandroid.bridge.notification.NotificationStore
 import com.hermesandroid.bridge.service.BridgeAccessibilityService
+import com.hermesandroid.bridge.service.BridgeNotificationListener
 import kotlinx.coroutines.*
 import okhttp3.*
 
@@ -80,6 +83,7 @@ object RelayClient {
         scope?.cancel()
         scope = null
         isConnected = false
+        BridgeAccessibilityService.instance?.stopForeground()
         notifyStatus(false, "Disconnected")
     }
 
@@ -107,6 +111,7 @@ object RelayClient {
             override fun onOpen(webSocket: WebSocket, response: Response) {
                 Log.i(TAG, "WebSocket connected to $wsUrl")
                 isConnected = true
+                BridgeAccessibilityService.instance?.startForeground()
                 notifyStatus(true, "Connected to $serverUrl")
             }
 
@@ -240,7 +245,7 @@ object RelayClient {
             method == "GET" && path == "/screen" -> {
                 val bounds = params.get("bounds")?.asString == "true"
                 val tree = ScreenReader.readCurrentScreen(bounds)
-                mapOf("tree" to tree, "count" to tree.size) to 200
+                mapOf("tree" to tree, "count" to countAllNodes(tree)) to 200
             }
 
             method == "POST" && path == "/tap" -> {
@@ -302,8 +307,9 @@ object RelayClient {
 
             method == "POST" && path == "/scroll" -> {
                 val direction = body.get("direction")?.asString ?: ""
+                val nodeId = body.get("nodeId")?.asString
                 val result = withContext(Dispatchers.Main) {
-                    ActionExecutor.swipe(direction, "medium")
+                    ActionExecutor.scroll(direction, nodeId)
                 }
                 result to 200
             }
@@ -331,10 +337,100 @@ object RelayClient {
                 ) to 200
             }
 
+            method == "GET" && path == "/clipboard" -> {
+                val result = ActionExecutor.clipboardRead()
+                result to 200
+            }
+
+            method == "POST" && path == "/clipboard" -> {
+                val text = body.get("text")?.asString ?: ""
+                val result = ActionExecutor.clipboardWrite(text)
+                result to 200
+            }
+
+            method == "GET" && path == "/notifications" -> {
+                val limit = params.get("limit")?.asString?.toIntOrNull() ?: 50
+                val since = params.get("since")?.asString?.toLongOrNull() ?: 0L
+                val entries = if (since > 0) {
+                    NotificationStore.getSince(since, limit)
+                } else {
+                    NotificationStore.getAll(limit)
+                }
+                val mapped = entries.map { NotificationStore.toMap(it) }
+                val listenerRunning = BridgeNotificationListener.instance != null
+                mapOf(
+                    "notifications" to mapped,
+                    "count" to mapped.size,
+                    "listenerActive" to listenerRunning
+                ) to 200
+            }
+
+            method == "POST" && path == "/long_press" -> {
+                val x = body.get("x")?.asInt
+                val y = body.get("y")?.asInt
+                val nodeId = body.get("nodeId")?.asString
+                val duration = body.get("duration")?.asLong ?: 500L
+                val result = withContext(Dispatchers.Main) {
+                    ActionExecutor.longPress(x, y, nodeId, duration)
+                }
+                result to 200
+            }
+
+            method == "POST" && path == "/drag" -> {
+                val startX = body.get("startX")?.asInt ?: 0
+                val startY = body.get("startY")?.asInt ?: 0
+                val endX = body.get("endX")?.asInt ?: 0
+                val endY = body.get("endY")?.asInt ?: 0
+                val duration = body.get("duration")?.asLong ?: 500L
+                val result = withContext(Dispatchers.Main) {
+                    ActionExecutor.drag(startX, startY, endX, endY, duration)
+                }
+                result to 200
+            }
+
+            method == "POST" && path == "/describe_node" -> {
+                val nodeId = body.get("nodeId")?.asString ?: ""
+                val result = withContext(Dispatchers.Main) {
+                    ActionExecutor.describeNode(nodeId)
+                }
+                result to 200
+            }
+
+            method == "GET" && path == "/screen_hash" -> {
+                val result = ActionExecutor.screenHash()
+                result to 200
+            }
+
+            method == "GET" && path == "/location" -> {
+                val result = ActionExecutor.location()
+                result to 200
+            }
+
+            method == "POST" && path == "/send_sms" -> {
+                val to = body.get("to")?.asString ?: ""
+                val smsBody = body.get("body")?.asString ?: ""
+                val result = ActionExecutor.sendSms(to, smsBody)
+                result to 200
+            }
+
+            method == "POST" && path == "/call" -> {
+                val number = body.get("number")?.asString ?: ""
+                val result = ActionExecutor.makeCall(number)
+                result to 200
+            }
+
             else -> {
                 mapOf("error" to "Unknown command: $method $path") to 404
             }
         }
+    }
+
+    private fun countAllNodes(nodes: List<ScreenNode>): Int {
+        var count = 0
+        for (node in nodes) {
+            count += 1 + countAllNodes(node.children)
+        }
+        return count
     }
 
     private fun notifyStatus(connected: Boolean, message: String) {

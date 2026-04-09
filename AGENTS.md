@@ -8,9 +8,10 @@ It communicates with a bridge app running on an Android device over HTTP.
 1. Install the bridge APK on the Android device
 2. Grant the bridge app Accessibility Service permission in Settings > Accessibility
 3. Grant SYSTEM_ALERT_WINDOW permission
-4. Set ANDROID_BRIDGE_URL in ~/.hermes/.env:
+4. Set ANDROID_BRIDGE_URL in ~/.hermes/.env (only needed for direct USB/LAN connection):
    - Same WiFi: `ANDROID_BRIDGE_URL=http://192.168.x.x:8765`
    - USB (recommended): run `adb forward tcp:8765 tcp:8765` then use `http://localhost:8765`
+   - Remote relay (default): no config needed — `android_setup` starts a relay on port 8766
 5. Install the Python package: `pip install -e ./hermes-android`
 6. Add to hermes-agent model_tools.py _modules: `"tools.android_tool"`
 7. Add "android" toolset to toolsets.py

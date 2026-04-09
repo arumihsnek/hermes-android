@@ -2,15 +2,20 @@ package com.hermesandroid.bridge.executor
 
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.GestureDescription
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Path
 import android.os.Build
 import android.os.Bundle
+import android.telephony.SmsManager
 import android.util.Base64
 import android.view.Display
 import android.view.accessibility.AccessibilityNodeInfo
 import com.hermesandroid.bridge.model.ActionResult
+import com.hermesandroid.bridge.model.ScreenNode
 import com.hermesandroid.bridge.power.WakeLockManager
 import com.hermesandroid.bridge.service.BridgeAccessibilityService
 import kotlinx.coroutines.delay
@@ -30,6 +35,7 @@ object ActionExecutor {
             val node = findNodeById(nodeId)
                 ?: return@wakeForAction ActionResult(false, "Node not found: $nodeId")
             val result = node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+            node.recycle()
             return@wakeForAction ActionResult(result, if (result) "Tapped node $nodeId" else "Click action failed")
         }
 
@@ -57,6 +63,7 @@ object ActionExecutor {
         val node = ScreenReader.findNodeByText(text, exact)
             ?: return@wakeForAction ActionResult(false, "Element with text '$text' not found")
         val result = node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+        node.recycle()
         ActionResult(result, if (result) "Tapped '$text'" else "Click failed on '$text'")
     }
 
@@ -139,12 +146,22 @@ object ActionExecutor {
         val service = BridgeAccessibilityService.instance
             ?: return ActionResult(false, "Accessibility service not running")
         val action = when (key) {
-            "back" -> android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK
-            "home" -> android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_HOME
-            "recents" -> android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_RECENTS
-            "notifications" -> android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_NOTIFICATIONS
-            "power" -> android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_POWER_DIALOG
+            "back" -> AccessibilityService.GLOBAL_ACTION_BACK
+            "home" -> AccessibilityService.GLOBAL_ACTION_HOME
+            "recents" -> AccessibilityService.GLOBAL_ACTION_RECENTS
+            "notifications" -> AccessibilityService.GLOBAL_ACTION_NOTIFICATIONS
+            "power" -> AccessibilityService.GLOBAL_ACTION_POWER_DIALOG
+            "quick_settings" -> AccessibilityService.GLOBAL_ACTION_QUICK_SETTINGS
+            "lock_screen" -> if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P)
+                AccessibilityService.GLOBAL_ACTION_LOCK_SCREEN else -1
+            "take_screenshot" -> if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P)
+                AccessibilityService.GLOBAL_ACTION_TAKE_SCREENSHOT else -1
+            "volume_up", "volume_down", "enter", "delete", "tab", "escape", "search" ->
+                return ActionResult(false, "Key '$key' is not supported via AccessibilityService global actions")
             else -> return ActionResult(false, "Unknown key: $key")
+        }
+        if (action == -1) {
+            return ActionResult(false, "Key '$key' requires Android 9+ (API 28)")
         }
         val result = service.performGlobalAction(action)
         return ActionResult(result, if (result) "Pressed $key" else "Key press failed")
@@ -236,13 +253,217 @@ object ActionExecutor {
         }.distinctBy { it["packageName"] }.sortedBy { it["label"] }
     }
 
+    suspend fun scroll(direction: String, nodeId: String? = null): ActionResult =
+        WakeLockManager.wakeForAction {
+            val service = BridgeAccessibilityService.instance
+                ?: return@wakeForAction ActionResult(false, "Accessibility service not running")
+
+            if (nodeId != null) {
+                val node = findNodeById(nodeId)
+                    ?: return@wakeForAction ActionResult(false, "Node not found: $nodeId")
+                val action = when (direction) {
+                    "down", "right" -> AccessibilityNodeInfo.ACTION_SCROLL_FORWARD
+                    "up", "left" -> AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD
+                    else -> return@wakeForAction ActionResult(false, "Unknown direction: $direction")
+                }
+                val result = node.performAction(action)
+                node.recycle()
+                return@wakeForAction ActionResult(result, if (result) "Scrolled $direction in node $nodeId" else "Scroll failed on node $nodeId")
+            }
+
+            swipe(direction, "medium")
+        }
+
+    fun clipboardRead(): ActionResult {
+        val service = BridgeAccessibilityService.instance
+            ?: return ActionResult(false, "Accessibility service not running")
+        val cm = service.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        if (!cm.hasPrimaryClip()) {
+            return ActionResult(true, "Clipboard is empty", "")
+        }
+        val clip = cm.primaryClip ?: return ActionResult(true, "Clipboard is empty", "")
+        if (clip.itemCount == 0) {
+            return ActionResult(true, "Clipboard is empty", "")
+        }
+        val text = clip.getItemAt(0)?.text?.toString() ?: ""
+        return ActionResult(true, "Clipboard read", text)
+    }
+
+    fun clipboardWrite(text: String): ActionResult {
+        val service = BridgeAccessibilityService.instance
+            ?: return ActionResult(false, "Accessibility service not running")
+        val cm = service.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        val clip = ClipData.newPlainText("hermes", text)
+        cm.setPrimaryClip(clip)
+        return ActionResult(true, "Copied to clipboard", text)
+    }
+
+    suspend fun longPress(x: Int? = null, y: Int? = null, nodeId: String? = null, duration: Long = 500): ActionResult =
+        WakeLockManager.wakeForAction {
+        val service = BridgeAccessibilityService.instance
+            ?: return@wakeForAction ActionResult(false, "Accessibility service not running")
+
+        if (nodeId != null) {
+            val node = findNodeById(nodeId)
+                ?: return@wakeForAction ActionResult(false, "Node not found: $nodeId")
+            val result = node.performAction(AccessibilityNodeInfo.ACTION_LONG_CLICK)
+            node.recycle()
+            return@wakeForAction ActionResult(result, if (result) "Long pressed node $nodeId" else "Long click action failed")
+        }
+
+        if (x != null && y != null) {
+            val path = Path().apply { moveTo(x.toFloat(), y.toFloat()) }
+            val gesture = GestureDescription.Builder()
+                .addStroke(GestureDescription.StrokeDescription(path, 0, duration))
+                .build()
+            var done = false
+            var success = false
+            service.dispatchGesture(gesture, object : AccessibilityService.GestureResultCallback() {
+                override fun onCompleted(g: GestureDescription) { success = true; done = true }
+                override fun onCancelled(g: GestureDescription) { success = false; done = true }
+            }, null)
+            var waited = 0
+            while (!done && waited < 3000) { delay(50); waited += 50 }
+            return@wakeForAction ActionResult(success, if (success) "Long pressed ($x, $y) ${duration}ms" else "Long press gesture cancelled")
+        }
+
+        ActionResult(false, "Provide either (x, y) or nodeId")
+    }
+
+    suspend fun drag(startX: Int, startY: Int, endX: Int, endY: Int, duration: Long = 500): ActionResult =
+        WakeLockManager.wakeForAction {
+        val service = BridgeAccessibilityService.instance
+            ?: return@wakeForAction ActionResult(false, "Accessibility service not running")
+
+        val path = Path().apply {
+            moveTo(startX.toFloat(), startY.toFloat())
+            lineTo(endX.toFloat(), endY.toFloat())
+        }
+        val gesture = GestureDescription.Builder()
+            .addStroke(GestureDescription.StrokeDescription(path, 0, duration))
+            .build()
+        var done = false
+        var success = false
+        service.dispatchGesture(gesture, object : AccessibilityService.GestureResultCallback() {
+            override fun onCompleted(g: GestureDescription) { success = true; done = true }
+            override fun onCancelled(g: GestureDescription) { success = false; done = true }
+        }, null)
+        var waited = 0
+        while (!done && waited < 3000) { delay(50); waited += 50 }
+        ActionResult(success, if (success) "Dragged ($startX,$startY) to ($endX,$endY)" else "Drag gesture cancelled")
+    }
+
+    fun describeNode(nodeId: String): ActionResult {
+        val node = findNodeById(nodeId)
+            ?: return ActionResult(false, "Node not found: $nodeId")
+        val r = android.graphics.Rect()
+        node.getBoundsInScreen(r)
+        val result = mutableMapOf<String, Any?>(
+            "nodeId" to nodeId,
+            "className" to node.className?.toString(),
+            "packageName" to node.packageName?.toString(),
+            "text" to node.text?.toString(),
+            "contentDescription" to node.contentDescription?.toString(),
+            "hintText" to if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) node.hintText?.toString() else null,
+            "bounds" to mapOf("left" to r.left, "top" to r.top, "right" to r.right, "bottom" to r.bottom),
+            "clickable" to node.isClickable,
+            "longClickable" to node.isLongClickable,
+            "focusable" to node.isFocusable,
+            "editable" to node.isEditable,
+            "scrollable" to node.isScrollable,
+            "checkable" to node.isCheckable,
+            "checked" to if (node.isCheckable) node.isChecked else null,
+            "enabled" to node.isEnabled,
+            "selected" to node.isSelected,
+            "childCount" to node.childCount,
+            "viewIdResourceName" to node.viewIdResourceName,
+            "isChecked" to node.isChecked,
+            "isFocusable" to node.isFocusable,
+            "isFocused" to node.isFocused,
+            "isAccessibilityFocused" to node.isAccessibilityFocused
+        )
+        node.recycle()
+        return ActionResult(true, "Node details", result)
+    }
+
+    fun location(): ActionResult {
+        val service = BridgeAccessibilityService.instance
+            ?: return ActionResult(false, "Accessibility service not running")
+        val lm = service.getSystemService(Context.LOCATION_SERVICE) as android.location.LocationManager
+        val providers = lm.getProviders(true)
+        var best: android.location.Location? = null
+        for (provider in providers) {
+            @Suppress("DEPRECATION")
+            val loc = lm.getLastKnownLocation(provider) ?: continue
+            if (best == null || loc.accuracy < best.accuracy) {
+                best = loc
+            }
+        }
+        if (best == null) {
+            return ActionResult(false, "No location available. Enable GPS/Location.")
+        }
+        return ActionResult(true, "Location", mapOf(
+            "latitude" to best.latitude,
+            "longitude" to best.longitude,
+            "accuracy" to best.accuracy,
+            "altitude" to best.altitude,
+            "provider" to (best.provider ?: "unknown"),
+            "timestamp" to best.time
+        ))
+    }
+
+    fun sendSms(to: String, body: String): ActionResult {
+        val service = BridgeAccessibilityService.instance
+            ?: return ActionResult(false, "Accessibility service not running")
+        val smsManager = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            service.getSystemService(SmsManager::class.java)
+        } else {
+            @Suppress("DEPRECATION")
+            SmsManager.getDefault()
+        }
+        smsManager.sendTextMessage(to, null, body, null, null)
+        return ActionResult(true, "SMS sent to $to")
+    }
+
+    fun makeCall(number: String): ActionResult {
+        val service = BridgeAccessibilityService.instance
+            ?: return ActionResult(false, "Accessibility service not running")
+        val intent = Intent(Intent.ACTION_CALL).apply {
+            data = android.net.Uri.parse("tel:$number")
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        service.startActivity(intent)
+        return ActionResult(true, "Calling $number")
+    }
+
+    fun screenHash(): ActionResult {
+        val nodes = ScreenReader.readCurrentScreen(false)
+        if (nodes.isEmpty()) {
+            return ActionResult(false, "No screen content")
+        }
+        val hash = nodes.joinToString("|") { it.computeHash() }
+        val count = nodes.sumOf { countNodes(it) }
+        return ActionResult(true, "Screen hash", mapOf("hash" to hash, "nodeCount" to count))
+    }
+
+    private fun countNodes(node: ScreenNode): Int {
+        return 1 + node.children.sumOf { countNodes(it) }
+    }
+
     private fun findNodeById(nodeId: String): AccessibilityNodeInfo? {
         val service = BridgeAccessibilityService.instance ?: return null
-        return service.windows
-            .flatMapIndexed { wi, window ->
-                window.root?.let { findNodeByIdInTree(it, nodeId, "$wi") } ?: emptyList()
+        val roots = service.windows.mapNotNull { it.root }
+        var found: AccessibilityNodeInfo? = null
+        for ((wi, root) in roots.withIndex()) {
+            val matches = findNodeByIdInTree(root, nodeId, "$wi")
+            if (matches.isNotEmpty()) {
+                found = matches.first()
+                for (r in roots.subList(wi + 1, roots.size)) r.recycle()
+                break
             }
-            .firstOrNull()
+            root.recycle()
+        }
+        return found
     }
 
     /** DFS search matching the stable ID format from ScreenReader.buildNode */

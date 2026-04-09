@@ -11,9 +11,10 @@ object ScreenReader {
         val service = BridgeAccessibilityService.instance
             ?: return listOf()
 
-        return service.windows
-            .flatMap { window -> window.root?.let { listOf(it) } ?: emptyList() }
-            .mapIndexed { i, root -> buildNode(root, includeBounds, "$i") }
+        val roots = service.windows.mapNotNull { it.root }
+        val result = roots.mapIndexed { i, root -> buildNode(root, includeBounds, "$i") }
+        roots.forEach { it.recycle() }
+        return result
     }
 
     private fun buildNode(info: AccessibilityNodeInfo, includeBounds: Boolean, path: String = "0"): ScreenNode {
@@ -54,26 +55,30 @@ object ScreenReader {
         exact: Boolean = false
     ): AccessibilityNodeInfo? {
         val service = BridgeAccessibilityService.instance ?: return null
-        return service.windows
-            .flatMap { it.root?.let { r -> listOf(r) } ?: emptyList() }
-            .flatMap { root -> flattenNodes(root) }
-            .firstOrNull { node ->
-                val nodeText = node.text?.toString() ?: node.contentDescription?.toString() ?: ""
-                if (exact) nodeText == text else nodeText.contains(text, ignoreCase = true)
-            }
+        val roots = service.windows.mapNotNull { it.root }
+        for (root in roots) {
+            val found = findNodeByTextDfs(root, text, exact)
+            if (found != null) return found
+            root.recycle()
+        }
+        return null
     }
 
-    private fun flattenNodes(root: AccessibilityNodeInfo): List<AccessibilityNodeInfo> {
-        val result = mutableListOf<AccessibilityNodeInfo>()
-        val queue = ArrayDeque<AccessibilityNodeInfo>()
-        queue.add(root)
-        while (queue.isNotEmpty()) {
-            val node = queue.removeFirst()
-            result.add(node)
-            for (i in 0 until node.childCount) {
-                node.getChild(i)?.let { queue.add(it) }
-            }
+    private fun findNodeByTextDfs(
+        node: AccessibilityNodeInfo,
+        text: String,
+        exact: Boolean
+    ): AccessibilityNodeInfo? {
+        val nodeText = node.text?.toString() ?: node.contentDescription?.toString() ?: ""
+        if ((exact && nodeText == text) || (!exact && nodeText.contains(text, ignoreCase = true))) {
+            return node
         }
-        return result
+        for (i in 0 until node.childCount) {
+            val child = node.getChild(i) ?: continue
+            val found = findNodeByTextDfs(child, text, exact)
+            if (found != null) return found
+            child.recycle()
+        }
+        return null
     }
 }

@@ -2,8 +2,10 @@ package com.hermesandroid.bridge.server
 
 import com.google.gson.Gson
 import com.hermesandroid.bridge.auth.PairingManager
+import com.hermesandroid.bridge.model.ScreenNode
 import com.hermesandroid.bridge.executor.ActionExecutor
 import com.hermesandroid.bridge.executor.ScreenReader
+import com.hermesandroid.bridge.notification.NotificationStore
 import com.hermesandroid.bridge.service.BridgeAccessibilityService
 import io.ktor.http.*
 import io.ktor.server.application.*
@@ -101,7 +103,7 @@ fun Application.configureRouting() {
             data class ScrollRequest(val direction: String, val nodeId: String? = null)
             val req = call.receive<ScrollRequest>()
             val result = withContext(Dispatchers.Main) {
-                ActionExecutor.swipe(req.direction, "medium")
+                ActionExecutor.scroll(req.direction, req.nodeId)
             }
             call.respond(result)
         }
@@ -136,9 +138,106 @@ fun Application.configureRouting() {
             }
             call.respond(result)
         }
+
+        get("/clipboard") {
+            val result = ActionExecutor.clipboardRead()
+            call.respond(result)
+        }
+
+        post("/clipboard") {
+            data class ClipboardWriteRequest(val text: String)
+            val req = call.receive<ClipboardWriteRequest>()
+            val result = ActionExecutor.clipboardWrite(req.text)
+            call.respond(result)
+        }
+
+        get("/notifications") {
+            val limit = call.request.queryParameters["limit"]?.toIntOrNull() ?: 50
+            val since = call.request.queryParameters["since"]?.toLongOrNull() ?: 0L
+            val entries = if (since > 0) {
+                NotificationStore.getSince(since, limit)
+            } else {
+                NotificationStore.getAll(limit)
+            }
+            val mapped = entries.map { NotificationStore.toMap(it) }
+            val listenerRunning = com.hermesandroid.bridge.service.BridgeNotificationListener.instance != null
+            call.respond(mapOf(
+                "notifications" to mapped,
+                "count" to mapped.size,
+                "listenerActive" to listenerRunning
+            ))
+        }
+
+        post("/long_press") {
+            data class LongPressRequest(val x: Int? = null, val y: Int? = null, val nodeId: String? = null, val duration: Long = 500)
+            val req = call.receive<LongPressRequest>()
+            val result = withContext(Dispatchers.Main) {
+                ActionExecutor.longPress(req.x, req.y, req.nodeId, req.duration)
+            }
+            call.respond(result)
+        }
+
+        post("/drag") {
+            data class DragRequest(val startX: Int, val startY: Int, val endX: Int, val endY: Int, val duration: Long = 500)
+            val req = call.receive<DragRequest>()
+            val result = withContext(Dispatchers.Main) {
+                ActionExecutor.drag(req.startX, req.startY, req.endX, req.endY, req.duration)
+            }
+            call.respond(result)
+        }
+
+        post("/describe_node") {
+            data class DescribeNodeRequest(val nodeId: String)
+            val req = call.receive<DescribeNodeRequest>()
+            val result = withContext(Dispatchers.Main) {
+                ActionExecutor.describeNode(req.nodeId)
+            }
+            call.respond(result)
+        }
+
+        get("/screen_hash") {
+            val result = withContext(Dispatchers.Main) {
+                ActionExecutor.screenHash()
+            }
+            call.respond(result)
+        }
+
+        get("/location") {
+            val result = ActionExecutor.location()
+            call.respond(result)
+        }
+
+        post("/send_sms") {
+            data class SmsRequest(val to: String, val body: String)
+            val req = call.receive<SmsRequest>()
+            val result = ActionExecutor.sendSms(req.to, req.body)
+            call.respond(result)
+        }
+
+        post("/call") {
+            data class CallRequest(val number: String)
+            val req = call.receive<CallRequest>()
+            val result = ActionExecutor.makeCall(req.number)
+            call.respond(result)
+        }
     }
 }
 
 private fun countNodes(nodes: List<Any>): Int {
-    return nodes.size
+    var count = 0
+    for (node in nodes) {
+        count++
+        if (node is ScreenNode) {
+            count += countNodeChildren(node)
+        }
+    }
+    return count
+}
+
+private fun countNodeChildren(node: ScreenNode): Int {
+    var count = node.children.size
+    for (child in node.children) {
+        count += countNodeChildren(child)
+    }
+    return count
 }

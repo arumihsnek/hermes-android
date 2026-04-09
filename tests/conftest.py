@@ -4,7 +4,7 @@ import responses
 
 @pytest.fixture
 def bridge_url():
-    return "http://localhost:8765"
+    return "http://localhost:8766"
 
 
 @pytest.fixture(autouse=True)

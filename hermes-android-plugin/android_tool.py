@@ -1,5 +1,9 @@
 """
-hermes-android tool — 14 android_* tool handlers + schemas.
+hermes-android tool — 25 android_* tool handlers + schemas.
+
+NOTE: This file must be kept in sync with tools/android_tool.py.
+      The only difference is the import path for android_relay (see android_setup).
+      Apply any bug fixes or feature changes to BOTH files.
 
 Used by the plugin's __init__.py to register tools into hermes-agent
 via ctx.register_tool().
@@ -21,18 +25,23 @@ from typing import Optional
 # For local/USB dev, tools can also talk directly to the phone's HTTP server
 # by setting ANDROID_BRIDGE_URL to the phone's IP.
 
+
 def _bridge_url() -> str:
     """URL of the relay (default) or direct phone connection."""
     return os.getenv("ANDROID_BRIDGE_URL", "http://localhost:8766")
 
+
 def _bridge_token() -> Optional[str]:
     return os.getenv("ANDROID_BRIDGE_TOKEN")
+
 
 def _relay_port() -> int:
     return int(os.getenv("ANDROID_RELAY_PORT", "8766"))
 
+
 def _timeout() -> float:
     return float(os.getenv("ANDROID_BRIDGE_TIMEOUT", "30"))
+
 
 def _auth_headers() -> dict:
     """Build auth headers with pairing code if configured."""
@@ -41,30 +50,42 @@ def _auth_headers() -> dict:
         return {"Authorization": f"Bearer {token}"}
     return {}
 
+
 def _check_requirements() -> bool:
     """Returns True if the relay is running and a phone is connected."""
     try:
         r = requests.get(f"{_bridge_url()}/ping", headers=_auth_headers(), timeout=2)
         if r.status_code == 200:
             data = r.json()
-            return data.get("phone_connected", False) or data.get("accessibilityService", False)
+            return data.get("phone_connected", False) or data.get(
+                "accessibilityService", False
+            )
         return False
     except Exception:
         return False
 
+
 def _post(path: str, payload: dict) -> dict:
-    r = requests.post(f"{_bridge_url()}{path}", json=payload,
-                      headers=_auth_headers(), timeout=_timeout())
+    r = requests.post(
+        f"{_bridge_url()}{path}",
+        json=payload,
+        headers=_auth_headers(),
+        timeout=_timeout(),
+    )
     r.raise_for_status()
     return r.json()
+
 
 def _get(path: str) -> dict:
-    r = requests.get(f"{_bridge_url()}{path}", headers=_auth_headers(),
-                     timeout=_timeout())
+    r = requests.get(
+        f"{_bridge_url()}{path}", headers=_auth_headers(), timeout=_timeout()
+    )
     r.raise_for_status()
     return r.json()
 
+
 # ── Tool implementations ───────────────────────────────────────────────────────
+
 
 def android_ping() -> str:
     try:
@@ -87,8 +108,9 @@ def android_read_screen(include_bounds: bool = False) -> str:
         return json.dumps({"error": str(e)})
 
 
-def android_tap(x: Optional[int] = None, y: Optional[int] = None,
-                node_id: Optional[str] = None) -> str:
+def android_tap(
+    x: Optional[int] = None, y: Optional[int] = None, node_id: Optional[str] = None
+) -> str:
     """
     Tap at screen coordinates (x, y) or by accessibility node_id.
     Prefer node_id when available — it's more reliable than coordinates.
@@ -185,6 +207,7 @@ def android_screenshot() -> str:
     try:
         import base64
         import tempfile
+
         data = _get("/screenshot")
         if "error" in data:
             return json.dumps(data)
@@ -197,7 +220,9 @@ def android_screenshot() -> str:
 
         # Save to temp file
         img_bytes = base64.b64decode(img_b64)
-        tmp = tempfile.NamedTemporaryFile(suffix=".jpg", prefix="android_screenshot_", delete=False)
+        tmp = tempfile.NamedTemporaryFile(
+            suffix=".jpg", prefix="android_screenshot_", delete=False
+        )
         tmp.write(img_bytes)
         tmp.close()
 
@@ -224,8 +249,9 @@ def android_scroll(direction: str, node_id: Optional[str] = None) -> str:
         return json.dumps({"error": str(e)})
 
 
-def android_wait(text: str = None, class_name: str = None,
-                 timeout_ms: int = 5000) -> str:
+def android_wait(
+    text: str = None, class_name: str = None, timeout_ms: int = 5000
+) -> str:
     """
     Wait for an element to appear on screen.
     Polls every 500ms up to timeout_ms.
@@ -261,9 +287,214 @@ def android_current_app() -> str:
         return json.dumps({"error": str(e)})
 
 
+def android_clipboard_read() -> str:
+    """
+    Read the current text content of the Android device clipboard.
+    Returns the clipboard text or empty string if clipboard is empty.
+    """
+    try:
+        data = _get("/clipboard")
+        return json.dumps(data)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+def android_clipboard_write(text: str) -> str:
+    """
+    Write text to the Android device clipboard.
+    Useful for pasting into input fields or sharing text between apps.
+    """
+    try:
+        data = _post("/clipboard", {"text": text})
+        return json.dumps(data)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+def android_notifications(limit: int = 50, since: int = 0) -> str:
+    """
+    Read recent notifications from the Android device.
+    Requires notification listener permission to be enabled.
+    Returns list of notifications with package, title, text, and timestamp.
+    Use since (unix ms) to get only notifications after a given time.
+    """
+    try:
+        data = _get(f"/notifications?limit={limit}&since={since}")
+        return json.dumps(data)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+def android_long_press(
+    x: Optional[int] = None,
+    y: Optional[int] = None,
+    node_id: Optional[str] = None,
+    duration: int = 500,
+) -> str:
+    """
+    Perform a long press at coordinates (x, y) or on a node by node_id.
+    Default duration is 500ms. Useful for context menus, widget moving, text selection.
+    """
+    try:
+        payload = {"duration": duration}
+        if node_id:
+            payload["nodeId"] = node_id
+        elif x is not None and y is not None:
+            payload["x"] = x
+            payload["y"] = y
+        else:
+            return json.dumps({"error": "Provide either (x, y) or node_id"})
+        data = _post("/long_press", payload)
+        return json.dumps(data)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+def android_drag(
+    start_x: int, start_y: int, end_x: int, end_y: int, duration: int = 500
+) -> str:
+    """
+    Drag from (start_x, start_y) to (end_x, end_y).
+    Useful for rearranging apps, pulling notification shade, map pin dragging.
+    """
+    try:
+        data = _post(
+            "/drag",
+            {
+                "startX": start_x,
+                "startY": start_y,
+                "endX": end_x,
+                "endY": end_y,
+                "duration": duration,
+            },
+        )
+        return json.dumps(data)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+def android_describe_node(node_id: str) -> str:
+    """
+    Get detailed properties of a specific UI node by its node_id.
+    Returns all properties including checked state, hint text, bounds, child count, etc.
+    """
+    try:
+        data = _post("/describe_node", {"nodeId": node_id})
+        return json.dumps(data)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+def android_screen_hash() -> str:
+    """
+    Get a hash of the current screen content. Lightweight alternative to
+    android_read_screen for detecting screen changes. Use in polling loops
+    to avoid transferring the full accessibility tree repeatedly.
+    """
+    try:
+        data = _get("/screen_hash")
+        return json.dumps(data)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+def android_macro(steps: list, name: str = "unnamed") -> str:
+    """
+    Execute a sequence of android tool calls in order.
+    Each step is a dict with 'tool' (tool name) and 'args' (dict of arguments).
+    Stops on first failure. Use for automating repeated workflows.
+    """
+    import time as _time
+
+    results = []
+    for i, step in enumerate(steps):
+        tool_name = step.get("tool", "")
+        args = step.get("args", {})
+
+        handler = _HANDLERS.get(tool_name)
+        if handler is None:
+            return json.dumps(
+                {
+                    "error": f"Step {i}: unknown tool '{tool_name}'",
+                    "completed": i,
+                    "results": results,
+                }
+            )
+
+        try:
+            result_str = handler(args)
+            result = (
+                json.loads(result_str) if isinstance(result_str, str) else result_str
+            )
+            results.append({"step": i, "tool": tool_name, "result": result})
+
+            if isinstance(result, dict) and not result.get("success", True):
+                return json.dumps(
+                    {
+                        "error": f"Step {i} ({tool_name}) failed",
+                        "completed": i,
+                        "results": results,
+                    }
+                )
+        except Exception as e:
+            return json.dumps(
+                {
+                    "error": f"Step {i} ({tool_name}) raised: {e}",
+                    "completed": i,
+                    "results": results,
+                }
+            )
+
+        _time.sleep(0.5)
+
+    return json.dumps(
+        {"success": True, "name": name, "completed": len(steps), "results": results}
+    )
+
+
+def android_location() -> str:
+    """
+    Get the phone's current GPS location (latitude, longitude, accuracy).
+    Requires location services to be enabled on the phone.
+    """
+    try:
+        data = _get("/location")
+        return json.dumps(data)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+def android_send_sms(to: str, body: str) -> str:
+    """
+    Send an SMS message directly without navigating the UI.
+    Requires SMS permission on the phone.
+    """
+    try:
+        data = _post("/send_sms", {"to": to, "body": body})
+        return json.dumps(data)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+def android_call(number: str) -> str:
+    """
+    Initiate a phone call directly. Requires CALL_PHONE permission.
+    The call UI will open on the phone.
+    """
+    try:
+        data = _post("/call", {"number": number})
+        return json.dumps(data)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
 def _get_public_ip() -> str:
     """Detect this server's public IP address."""
-    for service in ["https://api.ipify.org", "https://ifconfig.me/ip", "https://icanhazip.com"]:
+    for service in [
+        "https://api.ipify.org",
+        "https://ifconfig.me/ip",
+        "https://icanhazip.com",
+    ]:
         try:
             r = requests.get(service, timeout=3)
             if r.status_code == 200:
@@ -272,6 +503,7 @@ def _get_public_ip() -> str:
             continue
     # Fallback: hostname
     import socket
+
     try:
         return socket.gethostbyname(socket.gethostname())
     except Exception:
@@ -299,11 +531,13 @@ def android_setup(pairing_code: str) -> str:
         relay_url = f"http://localhost:{port}"
         try:
             from hermes_cli.config import save_env_value
+
             save_env_value("ANDROID_BRIDGE_URL", relay_url)
             save_env_value("ANDROID_BRIDGE_TOKEN", pairing_code)
             save_env_value("ANDROID_RELAY_PORT", str(port))
         except ImportError:
             from pathlib import Path
+
             env_path = Path.home() / ".hermes" / ".env"
             env_path.parent.mkdir(parents=True, exist_ok=True)
             _update_env_file(env_path, "ANDROID_BRIDGE_URL", relay_url)
@@ -317,6 +551,7 @@ def android_setup(pairing_code: str) -> str:
         # Start the relay server
         try:
             from .android_relay import start_relay, is_relay_running, is_phone_connected
+
             start_relay(pairing_code=pairing_code, port=port)
 
             # Check if phone is already connected
@@ -326,30 +561,36 @@ def android_setup(pairing_code: str) -> str:
             server_address = f"{public_ip}:{port}"
 
             if phone_connected:
-                return json.dumps({
-                    "status": "ok",
-                    "message": "Phone is connected and ready!",
-                    "phone_connected": True,
-                    "server_address": server_address,
-                })
+                return json.dumps(
+                    {
+                        "status": "ok",
+                        "message": "Phone is connected and ready!",
+                        "phone_connected": True,
+                        "server_address": server_address,
+                    }
+                )
             else:
-                return json.dumps({
-                    "status": "ok",
-                    "message": "Relay is running. Now tell the user to connect their phone.",
-                    "phone_connected": False,
-                    "server_address": server_address,
-                    "user_instructions": (
-                        f"Open the Hermes Bridge app on your phone and enter:\n"
-                        f"  Server: {server_address}\n"
-                        f"  Pairing code: {pairing_code}\n"
-                        f"Then tap Connect."
-                    ),
-                })
+                return json.dumps(
+                    {
+                        "status": "ok",
+                        "message": "Relay is running. Now tell the user to connect their phone.",
+                        "phone_connected": False,
+                        "server_address": server_address,
+                        "user_instructions": (
+                            f"Open the Hermes Bridge app on your phone and enter:\n"
+                            f"  Server: {server_address}\n"
+                            f"  Pairing code: {pairing_code}\n"
+                            f"Then tap Connect."
+                        ),
+                    }
+                )
         except ImportError:
-            return json.dumps({
-                "status": "error",
-                "message": "android_relay module not found. Make sure hermes-android plugin is installed.",
-            })
+            return json.dumps(
+                {
+                    "status": "error",
+                    "message": "android_relay module not found. Make sure hermes-android plugin is installed.",
+                }
+            )
 
     except Exception as e:
         return json.dumps({"status": "error", "message": str(e)})
@@ -404,7 +645,10 @@ _SCHEMAS = {
             "properties": {
                 "x": {"type": "integer", "description": "X coordinate in pixels"},
                 "y": {"type": "integer", "description": "Y coordinate in pixels"},
-                "node_id": {"type": "string", "description": "Accessibility node ID from android_read_screen"},
+                "node_id": {
+                    "type": "string",
+                    "description": "Accessibility node ID from android_read_screen",
+                },
             },
             "required": [],
         },
@@ -416,7 +660,11 @@ _SCHEMAS = {
             "type": "object",
             "properties": {
                 "text": {"type": "string", "description": "Text to find and tap"},
-                "exact": {"type": "boolean", "description": "Exact match (true) or contains match (false, default)", "default": False},
+                "exact": {
+                    "type": "boolean",
+                    "description": "Exact match (true) or contains match (false, default)",
+                    "default": False,
+                },
             },
             "required": ["text"],
         },
@@ -428,7 +676,11 @@ _SCHEMAS = {
             "type": "object",
             "properties": {
                 "text": {"type": "string", "description": "Text to type"},
-                "clear_first": {"type": "boolean", "description": "Clear existing content before typing", "default": False},
+                "clear_first": {
+                    "type": "boolean",
+                    "description": "Clear existing content before typing",
+                    "default": False,
+                },
             },
             "required": ["text"],
         },
@@ -439,8 +691,15 @@ _SCHEMAS = {
         "parameters": {
             "type": "object",
             "properties": {
-                "direction": {"type": "string", "enum": ["up", "down", "left", "right"]},
-                "distance": {"type": "string", "enum": ["short", "medium", "long"], "default": "medium"},
+                "direction": {
+                    "type": "string",
+                    "enum": ["up", "down", "left", "right"],
+                },
+                "distance": {
+                    "type": "string",
+                    "enum": ["short", "medium", "long"],
+                    "default": "medium",
+                },
             },
             "required": ["direction"],
         },
@@ -451,7 +710,10 @@ _SCHEMAS = {
         "parameters": {
             "type": "object",
             "properties": {
-                "package": {"type": "string", "description": "App package name e.g. com.ubercab"},
+                "package": {
+                    "type": "string",
+                    "description": "App package name e.g. com.ubercab",
+                },
             },
             "required": ["package"],
         },
@@ -464,7 +726,20 @@ _SCHEMAS = {
             "properties": {
                 "key": {
                     "type": "string",
-                    "enum": ["back", "home", "recents", "power", "volume_up", "volume_down", "enter", "delete", "tab", "escape", "search", "notifications"],
+                    "enum": [
+                        "back",
+                        "home",
+                        "recents",
+                        "power",
+                        "volume_up",
+                        "volume_down",
+                        "enter",
+                        "delete",
+                        "tab",
+                        "escape",
+                        "search",
+                        "notifications",
+                    ],
                 }
             },
             "required": ["key"],
@@ -481,8 +756,14 @@ _SCHEMAS = {
         "parameters": {
             "type": "object",
             "properties": {
-                "direction": {"type": "string", "enum": ["up", "down", "left", "right"]},
-                "node_id": {"type": "string", "description": "Node ID of scrollable container (optional, defaults to screen scroll)"},
+                "direction": {
+                    "type": "string",
+                    "enum": ["up", "down", "left", "right"],
+                },
+                "node_id": {
+                    "type": "string",
+                    "description": "Node ID of scrollable container (optional, defaults to screen scroll)",
+                },
             },
             "required": ["direction"],
         },
@@ -493,9 +774,19 @@ _SCHEMAS = {
         "parameters": {
             "type": "object",
             "properties": {
-                "text": {"type": "string", "description": "Wait for element with this text"},
-                "class_name": {"type": "string", "description": "Wait for element of this class"},
-                "timeout_ms": {"type": "integer", "description": "Max wait time in milliseconds", "default": 5000},
+                "text": {
+                    "type": "string",
+                    "description": "Wait for element with this text",
+                },
+                "class_name": {
+                    "type": "string",
+                    "description": "Wait for element of this class",
+                },
+                "timeout_ms": {
+                    "type": "integer",
+                    "description": "Max wait time in milliseconds",
+                    "default": 5000,
+                },
             },
             "required": [],
         },
@@ -524,23 +815,193 @@ _SCHEMAS = {
             "required": ["pairing_code"],
         },
     },
+    "android_clipboard_read": {
+        "name": "android_clipboard_read",
+        "description": "Read the current text content of the Android device clipboard. Returns the clipboard text or empty string if clipboard is empty.",
+        "parameters": {"type": "object", "properties": {}, "required": []},
+    },
+    "android_clipboard_write": {
+        "name": "android_clipboard_write",
+        "description": "Write text to the Android device clipboard. Useful for pasting into input fields or sharing text between apps.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "text": {
+                    "type": "string",
+                    "description": "Text to copy to the clipboard",
+                },
+            },
+            "required": ["text"],
+        },
+    },
+    "android_notifications": {
+        "name": "android_notifications",
+        "description": "Read recent notifications from the Android device. Requires notification listener permission. Returns notifications with package name, title, text, and timestamp.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "limit": {
+                    "type": "integer",
+                    "description": "Max number of notifications to return (default 50)",
+                    "default": 50,
+                },
+                "since": {
+                    "type": "integer",
+                    "description": "Only return notifications after this Unix timestamp in milliseconds (default 0 = all)",
+                    "default": 0,
+                },
+            },
+            "required": [],
+        },
+    },
+    "android_long_press": {
+        "name": "android_long_press",
+        "description": "Long press a UI element to trigger context menus, text selection, or widget moving. Supports coordinates or node_id.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "x": {"type": "integer", "description": "X coordinate in pixels"},
+                "y": {"type": "integer", "description": "Y coordinate in pixels"},
+                "node_id": {
+                    "type": "string",
+                    "description": "Accessibility node ID from android_read_screen",
+                },
+                "duration": {
+                    "type": "integer",
+                    "description": "Press duration in milliseconds (default 500)",
+                    "default": 500,
+                },
+            },
+            "required": [],
+        },
+    },
+    "android_drag": {
+        "name": "android_drag",
+        "description": "Drag from one point to another. Useful for rearranging apps, pulling notification shade, map pin dragging, and scrollable content.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "start_x": {"type": "integer", "description": "Start X coordinate"},
+                "start_y": {"type": "integer", "description": "Start Y coordinate"},
+                "end_x": {"type": "integer", "description": "End X coordinate"},
+                "end_y": {"type": "integer", "description": "End Y coordinate"},
+                "duration": {
+                    "type": "integer",
+                    "description": "Drag duration in milliseconds (default 500)",
+                    "default": 500,
+                },
+            },
+            "required": ["start_x", "start_y", "end_x", "end_y"],
+        },
+    },
+    "android_describe_node": {
+        "name": "android_describe_node",
+        "description": "Get detailed properties of a specific UI node. Returns all properties including checked state, hint text, bounds, child count, viewIdResourceName, etc.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "node_id": {
+                    "type": "string",
+                    "description": "Accessibility node ID from android_read_screen",
+                },
+            },
+            "required": ["node_id"],
+        },
+    },
+    "android_screen_hash": {
+        "name": "android_screen_hash",
+        "description": "Get a lightweight hash of the current screen content. Use for change detection in polling loops instead of repeatedly calling android_read_screen.",
+        "parameters": {"type": "object", "properties": {}, "required": []},
+    },
+    "android_macro": {
+        "name": "android_macro",
+        "description": "Execute a sequence of android tool calls in order. Each step is a dict with 'tool' and 'args'. Stops on first failure. Use for automating repeated multi-step workflows.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "steps": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "tool": {
+                                "type": "string",
+                                "description": "Tool name e.g. android_tap",
+                            },
+                            "args": {
+                                "type": "object",
+                                "description": "Arguments for the tool",
+                            },
+                        },
+                        "required": ["tool"],
+                    },
+                    "description": "Ordered list of tool calls to execute",
+                },
+                "name": {
+                    "type": "string",
+                    "description": "Name for this macro (for logging)",
+                    "default": "unnamed",
+                },
+            },
+            "required": ["steps"],
+        },
+    },
+    "android_location": {
+        "name": "android_location",
+        "description": "Get the phone's current GPS location. Returns latitude, longitude, accuracy, and provider. Requires location services enabled.",
+        "parameters": {"type": "object", "properties": {}, "required": []},
+    },
+    "android_send_sms": {
+        "name": "android_send_sms",
+        "description": "Send an SMS message directly without navigating the messaging app. Requires SMS permission.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "to": {"type": "string", "description": "Phone number to send SMS to"},
+                "body": {"type": "string", "description": "SMS message text"},
+            },
+            "required": ["to", "body"],
+        },
+    },
+    "android_call": {
+        "name": "android_call",
+        "description": "Initiate a phone call. Opens the phone call UI on the device.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "number": {"type": "string", "description": "Phone number to call"},
+            },
+            "required": ["number"],
+        },
+    },
 }
 
 # ── Tool handlers map ──────────────────────────────────────────────────────────
 
 _HANDLERS = {
-    "android_ping":         lambda args, **kw: android_ping(),
-    "android_read_screen":  lambda args, **kw: android_read_screen(**args),
-    "android_tap":          lambda args, **kw: android_tap(**args),
-    "android_tap_text":     lambda args, **kw: android_tap_text(**args),
-    "android_type":         lambda args, **kw: android_type(**args),
-    "android_swipe":        lambda args, **kw: android_swipe(**args),
-    "android_open_app":     lambda args, **kw: android_open_app(**args),
-    "android_press_key":    lambda args, **kw: android_press_key(**args),
-    "android_screenshot":   lambda args, **kw: android_screenshot(),
-    "android_scroll":       lambda args, **kw: android_scroll(**args),
-    "android_wait":         lambda args, **kw: android_wait(**args),
-    "android_get_apps":     lambda args, **kw: android_get_apps(),
-    "android_current_app":  lambda args, **kw: android_current_app(),
-    "android_setup":        lambda args, **kw: android_setup(**args),
+    "android_ping": lambda args, **kw: android_ping(),
+    "android_read_screen": lambda args, **kw: android_read_screen(**args),
+    "android_tap": lambda args, **kw: android_tap(**args),
+    "android_tap_text": lambda args, **kw: android_tap_text(**args),
+    "android_type": lambda args, **kw: android_type(**args),
+    "android_swipe": lambda args, **kw: android_swipe(**args),
+    "android_open_app": lambda args, **kw: android_open_app(**args),
+    "android_press_key": lambda args, **kw: android_press_key(**args),
+    "android_screenshot": lambda args, **kw: android_screenshot(),
+    "android_scroll": lambda args, **kw: android_scroll(**args),
+    "android_wait": lambda args, **kw: android_wait(**args),
+    "android_get_apps": lambda args, **kw: android_get_apps(),
+    "android_current_app": lambda args, **kw: android_current_app(),
+    "android_setup": lambda args, **kw: android_setup(**args),
+    "android_clipboard_read": lambda args, **kw: android_clipboard_read(),
+    "android_clipboard_write": lambda args, **kw: android_clipboard_write(**args),
+    "android_notifications": lambda args, **kw: android_notifications(**args),
+    "android_long_press": lambda args, **kw: android_long_press(**args),
+    "android_drag": lambda args, **kw: android_drag(**args),
+    "android_describe_node": lambda args, **kw: android_describe_node(**args),
+    "android_screen_hash": lambda args, **kw: android_screen_hash(),
+    "android_macro": lambda args, **kw: android_macro(**args),
+    "android_location": lambda args, **kw: android_location(),
+    "android_send_sms": lambda args, **kw: android_send_sms(**args),
+    "android_call": lambda args, **kw: android_call(**args),
 }

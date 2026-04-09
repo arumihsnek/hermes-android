@@ -2,6 +2,7 @@ package com.hermesandroid.bridge.service
 
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.AccessibilityServiceInfo
+import android.os.Build
 import android.view.accessibility.AccessibilityEvent
 
 class BridgeAccessibilityService : AccessibilityService() {
@@ -26,6 +27,48 @@ class BridgeAccessibilityService : AccessibilityService() {
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         // No-op — we read state on demand, not event-driven
+    }
+
+    private var isForeground = false
+
+    fun startForeground() {
+        if (isForeground) return
+        val channelId = "hermes_bridge_channel"
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = android.app.NotificationChannel(
+                channelId,
+                "Hermes Bridge",
+                android.app.NotificationManager.IMPORTANCE_LOW
+            ).apply {
+                description = "Keeps Hermes Bridge running"
+            }
+            val manager = getSystemService(android.content.Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+            manager.createNotificationChannel(channel)
+        }
+        val notification = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            android.app.Notification.Builder(this, channelId)
+                .setContentTitle("Hermes Bridge")
+                .setContentText("Connected to server")
+                .setSmallIcon(android.R.drawable.ic_dialog_info)
+                .setOngoing(true)
+                .build()
+        } else {
+            @Suppress("DEPRECATION")
+            android.app.Notification.Builder(this)
+                .setContentTitle("Hermes Bridge")
+                .setContentText("Connected to server")
+                .setSmallIcon(android.R.drawable.ic_dialog_info)
+                .setOngoing(true)
+                .build()
+        }
+        startForeground(1, notification)
+        isForeground = true
+    }
+
+    fun stopForeground() {
+        if (!isForeground) return
+        stopForeground(true)
+        isForeground = false
     }
 
     override fun onInterrupt() {
