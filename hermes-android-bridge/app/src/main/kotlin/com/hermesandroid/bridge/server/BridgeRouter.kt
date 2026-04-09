@@ -21,6 +21,16 @@ private val gson = Gson()
 
 fun Application.configureRouting() {
     routing {
+        intercept(ApplicationCallPipeline.Plugins) {
+            val path = call.request.path()
+            if (path != "/ping") {
+                val authHeader = call.request.header(HttpHeaders.Authorization)
+                if (!PairingManager.validateToken(authHeader)) {
+                    call.respond(HttpStatusCode.Unauthorized, mapOf("error" to "Unauthorized"))
+                    finish()
+                }
+            }
+        }
 
         get("/ping") {
             val serviceRunning = BridgeAccessibilityService.instance != null

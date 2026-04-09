@@ -443,11 +443,7 @@ object ActionExecutor {
             "enabled" to node.isEnabled,
             "selected" to node.isSelected,
             "childCount" to node.childCount,
-            "viewIdResourceName" to node.viewIdResourceName,
-            "isChecked" to node.isChecked,
-            "isFocusable" to node.isFocusable,
-            "isFocused" to node.isFocused,
-            "isAccessibilityFocused" to node.isAccessibilityFocused
+            "viewIdResourceName" to node.viewIdResourceName
         )
         node.recycle()
         return ActionResult(true, "Node details", result)
@@ -482,52 +478,58 @@ object ActionExecutor {
     fun sendSms(to: String, body: String): ActionResult {
         val service = BridgeAccessibilityService.instance
             ?: return ActionResult(false, "Accessibility service not running")
-        val smsManager = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            service.getSystemService(SmsManager::class.java)
-        } else {
-            @Suppress("DEPRECATION")
-            SmsManager.getDefault()
+        if (!service.hasSelfPermission(android.Manifest.permission.SEND_SMS)) {
+            return ActionResult(false, "SEND_SMS permission not granted. Grant it in Settings > Apps > Hermes Bridge > Permissions.")
         }
-        smsManager.sendTextMessage(to, null, body, null, null)
-        return ActionResult(true, "SMS sent to $to")
+        return try {
+            val smsManager = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                service.getSystemService(SmsManager::class.java)
+            } else {
+                @Suppress("DEPRECATION")
+                SmsManager.getDefault()
+            }
+            smsManager.sendTextMessage(to, null, body, null, null)
+            ActionResult(true, "SMS sent to $to")
+        } catch (e: SecurityException) {
+            ActionResult(false, "SMS permission denied: ${e.message}")
+        }
     }
 
     fun makeCall(number: String): ActionResult {
         val service = BridgeAccessibilityService.instance
             ?: return ActionResult(false, "Accessibility service not running")
-        val intent = Intent(Intent.ACTION_CALL).apply {
+        val hasCallPermission = service.hasSelfPermission(android.Manifest.permission.CALL_PHONE)
+        val intent = Intent(if (hasCallPermission) Intent.ACTION_CALL else Intent.ACTION_DIAL).apply {
             data = android.net.Uri.parse("tel:$number")
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
-        service.startActivity(intent)
-        return ActionResult(true, "Calling $number")
+        return try {
+            service.startActivity(intent)
+            ActionResult(true, if (hasCallPermission) "Calling $number" else "Opened dialer for $number (grant CALL_PHONE permission to auto-dial)")
+        } catch (e: SecurityException) {
+            ActionResult(false, "Call failed: ${e.message}")
+        }
     }
 
     fun mediaControl(action: String): ActionResult {
         val service = BridgeAccessibilityService.instance
             ?: return ActionResult(false, "Accessibility service not running")
-        val intent = when (action) {
-            "play", "pause", "toggle" -> {
-                Intent(if (action == "toggle") "com.android.intent.action.MEDIA_BUTTON" else "com.android.intent.action.MEDIA_BUTTON").apply {
-                    putExtra(Intent.EXTRA_KEY_EVENT, android.view.KeyEvent(
-                        android.view.KeyEvent.ACTION_DOWN,
-                        if (action == "play") android.view.KeyEvent.KEYCODE_MEDIA_PLAY
-                        else if (action == "pause") android.view.KeyEvent.KEYCODE_MEDIA_PAUSE
-                        else android.view.KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE
-                    ))
-                }
-            }
-            "next" -> Intent(Intent.ACTION_MEDIA_BUTTON).apply {
-                putExtra(Intent.EXTRA_KEY_EVENT, android.view.KeyEvent(
-                    android.view.KeyEvent.ACTION_DOWN, android.view.KeyEvent.KEYCODE_MEDIA_NEXT))
-            }
-            "previous" -> Intent(Intent.ACTION_MEDIA_BUTTON).apply {
-                putExtra(Intent.EXTRA_KEY_EVENT, android.view.KeyEvent(
-                    android.view.KeyEvent.ACTION_DOWN, android.view.KeyEvent.KEYCODE_MEDIA_PREVIOUS))
-            }
+        val keyCode = when (action) {
+            "play" -> android.view.KeyEvent.KEYCODE_MEDIA_PLAY
+            "pause" -> android.view.KeyEvent.KEYCODE_MEDIA_PAUSE
+            "toggle" -> android.view.KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE
+            "next" -> android.view.KeyEvent.KEYCODE_MEDIA_NEXT
+            "previous" -> android.view.KeyEvent.KEYCODE_MEDIA_PREVIOUS
             else -> return ActionResult(false, "Unknown media action: $action. Use play, pause, toggle, next, previous.")
         }
-        service.sendOrderedBroadcast(intent, null)
+        val downIntent = Intent(Intent.ACTION_MEDIA_BUTTON).apply {
+            putExtra(Intent.EXTRA_KEY_EVENT, android.view.KeyEvent(android.view.KeyEvent.ACTION_DOWN, keyCode))
+        }
+        val upIntent = Intent(Intent.ACTION_MEDIA_BUTTON).apply {
+            putExtra(Intent.EXTRA_KEY_EVENT, android.view.KeyEvent(android.view.KeyEvent.ACTION_UP, keyCode))
+        }
+        service.sendOrderedBroadcast(downIntent, null)
+        service.sendOrderedBroadcast(upIntent, null)
         return ActionResult(true, "Media $action sent")
     }
 
@@ -654,7 +656,7 @@ object ActionExecutor {
         return results
     }
 
-    fun readWidgets(): ActionResult {
+    suspend fun readWidgets(): ActionResult {
         val service = BridgeAccessibilityService.instance
             ?: return ActionResult(false, "Accessibility service not running")
 
@@ -663,7 +665,7 @@ object ActionExecutor {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
         service.startActivity(homeIntent)
-        Thread.sleep(1000)
+        delay(1000)
 
         val roots = service.windows.mapNotNull { it.root }
         val widgets = mutableListOf<Map<String, Any?>>()
@@ -680,7 +682,7 @@ object ActionExecutor {
         val desc = node.contentDescription?.toString()
         val className = node.className?.toString() ?: ""
 
-        if (depth <= 3 && (text != null || desc != null) && className.contains("Widget", ignoreCase = true) || className.contains("widget", ignoreCase = true) || (depth <= 2 && (text != null || desc != null))) {
+        if ((depth <= 3 && (text != null || desc != null) && className.contains("Widget", ignoreCase = true)) || (depth <= 2 && (text != null || desc != null))) {
             val r = android.graphics.Rect()
             node.getBoundsInScreen(r)
             widgets.add(mapOf(
@@ -742,5 +744,10 @@ object ActionExecutor {
     fun stopSpeaking(): ActionResult {
         tts?.stop()
         return ActionResult(true, "Stopped speaking")
+    }
+
+    private fun Context.hasSelfPermission(permission: String): Boolean {
+        return android.content.pm.PackageManager.PERMISSION_GRANTED ==
+            checkSelfPermission(permission)
     }
 }

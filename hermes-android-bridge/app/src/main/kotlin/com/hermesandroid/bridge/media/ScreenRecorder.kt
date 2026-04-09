@@ -9,6 +9,7 @@ import android.media.projection.MediaProjection
 import android.media.projection.MediaProjectionManager
 import android.util.Base64
 import com.hermesandroid.bridge.service.BridgeAccessibilityService
+import kotlinx.coroutines.delay
 import java.io.File
 
 object ScreenRecorder {
@@ -23,7 +24,7 @@ object ScreenRecorder {
         projection = p
     }
 
-    fun record(durationMs: Long = 5000): Map<String, Any?> {
+    suspend fun record(durationMs: Long = 5000): Map<String, Any?> {
         val service = BridgeAccessibilityService.instance
             ?: return mapOf("success" to false, "message" to "Accessibility service not running")
         val proj = projection
@@ -56,7 +57,7 @@ object ScreenRecorder {
 
         mr.start()
 
-        Thread.sleep(durationMs)
+        kotlinx.coroutines.delay(durationMs)
 
         mr.stop()
         mr.release()

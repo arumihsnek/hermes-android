@@ -211,8 +211,35 @@ async def _serve(state: _RelayState, ready: threading.Event) -> None:
         "/press_key",
         "/scroll",
         "/wait",
+        "/long_press",
+        "/drag",
+        "/describe_node",
+        "/find_nodes",
+        "/diff_screen",
+        "/pinch",
+        "/send_sms",
+        "/call",
+        "/media",
+        "/intent",
+        "/broadcast",
+        "/speak",
+        "/stop_speaking",
+        "/screen_record",
+        "/events/stream",
     ):
         app.router.add_post(path, lambda req, p=path: _handle_http(req, state, p))
+
+    # HTTP bridge endpoints (GET) — additional
+    for path in (
+        "/clipboard",
+        "/notifications",
+        "/contacts",
+        "/events",
+        "/screen_hash",
+        "/location",
+        "/widgets",
+    ):
+        app.router.add_get(path, lambda req, p=path: _handle_http(req, state, p))
 
     runner = web.AppRunner(app)
     state.runner = runner

@@ -178,14 +178,16 @@ object RelayClient {
     }
 
     private fun buildWsUrl(serverUrl: String, pairingCode: String): String {
-        var base = serverUrl.trim().trimEnd('/')
-        // Strip any http(s):// prefix, we'll add ws://
-        base = base.removePrefix("http://").removePrefix("https://").removePrefix("ws://").removePrefix("wss://")
-        // Add default port if none specified
+        val trimmed = serverUrl.trim().trimEnd('/')
+        val useTls = trimmed.startsWith("https://") || trimmed.startsWith("wss://")
+        var base = trimmed
+            .removePrefix("http://").removePrefix("https://")
+            .removePrefix("ws://").removePrefix("wss://")
         if (!base.contains(":")) {
             base = "$base:8766"
         }
-        val url = "ws://$base/ws?token=$pairingCode"
+        val scheme = if (useTls) "wss" else "ws"
+        val url = "$scheme://$base/ws?token=$pairingCode"
         Log.i(TAG, "Built WebSocket URL: $url")
         return url
     }
