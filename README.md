@@ -18,7 +18,7 @@ This repo contains **two components**:
 | Component | Path | Language | Purpose |
 |-----------|------|----------|---------|
 | **Android bridge app** | `hermes-android-bridge/` | Kotlin | Runs on the phone. Connects to server via WebSocket, executes commands via AccessibilityService |
-| **Python toolset** | `tools/`, `tests/` | Python | Runs on the server. 14 `android_*` tools + WebSocket relay. Also lives in [hermes-agent](https://github.com/NousResearch/hermes-agent) as the production copy |
+| **Python toolset** | `tools/`, `tests/` | Python | Runs on the server. 36 `android_*` tools + WebSocket relay. Also lives in [hermes-agent](https://github.com/NousResearch/hermes-agent) as the production copy |
 
 > **Note:** The Python code exists here for standalone development and testing (`pip install -e .`, `pytest`). The production copy is in the hermes-agent repo. The Android app does not use or depend on the Python files.
 
@@ -34,7 +34,7 @@ mkdir -p ~/.hermes/plugins
 cp -r hermes-android-plugin ~/.hermes/plugins/hermes-android
 ```
 
-Restart hermes — run `/plugins` to verify. Should show: `✓ hermes-android v0.2.0 (14 tools)`
+Restart hermes — run `/plugins` to verify. Should show: `✓ hermes-android v0.3.0 (36 tools)`
 
 ## Quick Start
 
@@ -51,6 +51,13 @@ adb install app/build/outputs/apk/debug/app-debug.apk
 - Open Hermes Bridge app
 - Tap **Enable Accessibility Service** → find Hermes Bridge → toggle ON
 - Tap **Enable Status Overlay** → grant permission
+- Tap **Grant Screen Recording** → approve the system dialog (needed for `android_screen_record`)
+- Grant additional runtime permissions in **Settings > Apps > Hermes Bridge > Permissions**:
+  - **Location** — for `android_location`
+  - **Contacts** — for `android_search_contacts`
+  - **SMS** — for `android_send_sms`
+  - **Phone** — for `android_call` (direct dialing)
+- Enable **Notification Listener** in **Settings > Apps > Special app access > Notification access** → enable Hermes Bridge (for `android_notifications` / `android_events`)
 
 ### 3. Connect to your Hermes server
 
@@ -65,7 +72,7 @@ Hermes will reply with the server address. Enter it in the app and tap **Connect
 ### 4. Done
 The agent can now control your phone. Try: "open Instagram", "take a screenshot", "what apps do I have?"
 
-## Tools (14)
+## Tools (36)
 
 | Tool | Description |
 |------|-------------|
@@ -83,6 +90,42 @@ The agent can now control your phone. Try: "open Instagram", "take a screenshot"
 | `android_wait` | Wait for element to appear |
 | `android_get_apps` | List installed apps |
 | `android_current_app` | Get foreground app info |
+| `android_long_press` | Long press by coordinates or node ID |
+| `android_drag` | Drag from one point to another |
+| `android_pinch` | Pinch zoom in/out at coordinates |
+| `android_find_nodes` | Search accessibility nodes by text/class/clickable |
+| `android_describe_node` | Get detailed info about a specific node |
+| `android_screen_hash` | Get hash of current screen for change detection |
+| `android_diff_screen` | Compare current screen against a previous hash |
+| `android_location` | Get phone GPS location |
+| `android_search_contacts` | Search contacts by name |
+| `android_send_sms` | Send SMS to a phone number |
+| `android_call` | Make a phone call or open dialer |
+| `android_media` | Control media playback (play, pause, next, previous) |
+| `android_send_intent` | Send an Android intent |
+| `android_broadcast` | Send a broadcast intent |
+| `android_clipboard_read` | Read clipboard contents |
+| `android_clipboard_write` | Write text to clipboard |
+| `android_notifications` | Read current notifications |
+| `android_events` | Read recent accessibility events |
+| `android_event_stream` | Stream accessibility events in real-time |
+| `android_screen_record` | Record screen video for a duration |
+| `android_read_widgets` | Read home screen widgets |
+| `android_speak` | Text-to-speech output |
+| `android_speak_stop` | Stop text-to-speech |
+
+## Permissions
+
+| Permission | How to Grant | Required For |
+|------------|-------------|--------------|
+| Accessibility Service | App button → Settings > Accessibility | All tools (core requirement) |
+| System Alert Window (Overlay) | App button → Settings > Draw over apps | Status overlay display |
+| Screen Recording (MediaProjection) | App button → approve system dialog | `android_screen_record` |
+| Location | Settings > Apps > Permissions > Location | `android_location` |
+| Read Contacts | Settings > Apps > Permissions > Contacts | `android_search_contacts` |
+| Send SMS | Settings > Apps > Permissions > SMS | `android_send_sms` |
+| Call Phone | Settings > Apps > Permissions > Phone | `android_call` (auto-dial) |
+| Notification Listener | Settings > Special app access > Notification access | `android_notifications`, `android_events` |
 
 ## Architecture
 
@@ -132,11 +175,11 @@ This is a working prototype. The vision: **give Hermes its own phone** — a ful
 - [ ] Auto-reconnect relay on gateway restart
 
 ### v0.3 — Richer Phone Interaction
-- [ ] **Notification listener** — agent reads incoming notifications in real-time
-- [ ] **Clipboard bridge** — copy/paste between server and phone
+- [x] **Notification listener** — agent reads incoming notifications in real-time
+- [x] **Clipboard bridge** — copy/paste between server and phone
 - [ ] **File transfer** — send files/photos between phone and server
-- [ ] **Direct SMS/calls** — send texts and make calls without navigating the UI
-- [ ] **Location sharing** — agent knows where the phone is for contextual tasks
+- [x] **Direct SMS/calls** — send texts and make calls without navigating the UI
+- [x] **Location sharing** — agent knows where the phone is for contextual tasks
 
 ### v0.4 — Multi-Device & Automation
 - [ ] **Multiple phones** — connect more than one device to the same relay

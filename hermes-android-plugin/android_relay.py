@@ -226,6 +226,7 @@ async def _serve(state: _RelayState, ready: threading.Event) -> None:
         "/stop_speaking",
         "/screen_record",
         "/events/stream",
+        "/clipboard",
     ):
         app.router.add_post(path, lambda req, p=path: _handle_http(req, state, p))
 

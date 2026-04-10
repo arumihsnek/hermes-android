@@ -113,7 +113,7 @@ object ScreenReader {
             val r = android.graphics.Rect()
             node.getBoundsInScreen(r)
             results.add(mapOf(
-                "nodeId" to path,
+                "nodeId" to "${node.packageName ?: "?"}_${node.className ?: "?"}_${path}_${r.left}_${r.top}_${r.right}_${r.bottom}",
                 "text" to node.text?.toString(),
                 "contentDescription" to node.contentDescription?.toString(),
                 "className" to nodeClass,

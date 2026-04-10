@@ -119,8 +119,19 @@
         android:background="#2A2A2A"
         android:gravity="start|center_vertical"
         android:paddingStart="12dp"
-        android:layout_marginBottom="12dp"
+        android:layout_marginBottom="4dp"
         android:textAllCaps="false" />
+
+    <TextView
+        android:id="@+id/tvScreenRecordStatus"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text=""
+        android:textSize="11sp"
+        android:textColor="#4CAF50"
+        android:fontFamily="monospace"
+        android:paddingStart="12dp"
+        android:layout_marginBottom="12dp" />
 
     <!-- Divider -->
     <View
@@ -128,8 +139,6 @@
         android:layout_height="1dp"
         android:background="#333333"
         android:layout_marginBottom="12dp" />
-
-    <!-- Step 2: Pairing Code -->
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"

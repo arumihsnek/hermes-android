@@ -63,9 +63,38 @@ object ActionExecutor {
         WakeLockManager.wakeForAction {
         val node = ScreenReader.findNodeByText(text, exact)
             ?: return@wakeForAction ActionResult(false, "Element with text '$text' not found")
-        val result = node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+
+        if (node.isClickable) {
+            val result = node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+            node.recycle()
+            return@wakeForAction ActionResult(result, if (result) "Tapped '$text'" else "Click failed on '$text'")
+        }
+
+        var parent = node.parent
+        var clickableParent: AccessibilityNodeInfo? = null
+        while (parent != null) {
+            if (parent.isClickable) {
+                clickableParent = parent
+                break
+            }
+            val grandparent = parent.parent
+            parent.recycle()
+            parent = grandparent
+        }
+
+        if (clickableParent != null) {
+            val result = clickableParent.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+            clickableParent.recycle()
+            node.recycle()
+            return@wakeForAction ActionResult(result, if (result) "Tapped '$text' (via parent)" else "Click failed on '$text'")
+        }
+
+        val r = android.graphics.Rect()
+        node.getBoundsInScreen(r)
         node.recycle()
-        ActionResult(result, if (result) "Tapped '$text'" else "Click failed on '$text'")
+        val cx = (r.left + r.right) / 2
+        val cy = (r.top + r.bottom) / 2
+        tap(cx, cy)
     }
 
     suspend fun typeText(text: String, clearFirst: Boolean = false): ActionResult =
@@ -537,40 +566,48 @@ object ActionExecutor {
     fun searchContacts(query: String, limit: Int = 20): ActionResult {
         val service = BridgeAccessibilityService.instance
             ?: return ActionResult(false, "Accessibility service not running")
-        val results = mutableListOf<Map<String, String?>>()
-        val uri = android.net.Uri.withAppendedPath(android.provider.ContactsContract.Contacts.CONTENT_FILTER_URI, query)
-        val projection = arrayOf(
-            android.provider.ContactsContract.Contacts._ID,
-            android.provider.ContactsContract.Contacts.DISPLAY_NAME
-        )
-        val cursor = service.contentResolver.query(uri, projection, null, null, "${android.provider.ContactsContract.Contacts.DISPLAY_NAME} ASC LIMIT $limit")
-        cursor?.use {
-            val idIdx = it.getColumnIndex(android.provider.ContactsContract.Contacts._ID)
-            val nameIdx = it.getColumnIndex(android.provider.ContactsContract.Contacts.DISPLAY_NAME)
-            while (it.moveToNext()) {
-                val contactId = it.getString(idIdx) ?: continue
-                val name = it.getString(nameIdx) ?: continue
-                val phoneNumbers = mutableListOf<String>()
-                val phoneCursor = service.contentResolver.query(
-                    android.provider.ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
-                    arrayOf(android.provider.ContactsContract.CommonDataKinds.Phone.NUMBER),
-                    "${android.provider.ContactsContract.CommonDataKinds.Phone.CONTACT_ID} = ?",
-                    arrayOf(contactId),
-                    null
-                )
-                phoneCursor?.use { pc ->
-                    val numIdx = pc.getColumnIndex(android.provider.ContactsContract.CommonDataKinds.Phone.NUMBER)
-                    while (pc.moveToNext()) {
-                        pc.getString(numIdx)?.let { num -> phoneNumbers.add(num) }
+        if (!service.hasSelfPermission(android.Manifest.permission.READ_CONTACTS)) {
+            return ActionResult(false, "READ_CONTACTS permission not granted. Grant it in Settings > Apps > Hermes Bridge > Permissions.")
+        }
+        return try {
+            val results = mutableListOf<Map<String, String?>>()
+            val uri = android.net.Uri.withAppendedPath(android.provider.ContactsContract.Contacts.CONTENT_FILTER_URI, query)
+            val projection = arrayOf(
+                android.provider.ContactsContract.Contacts._ID,
+                android.provider.ContactsContract.Contacts.DISPLAY_NAME
+            )
+            val cursor = service.contentResolver.query(uri, projection, null, null, "${android.provider.ContactsContract.Contacts.DISPLAY_NAME} ASC LIMIT $limit")
+            cursor?.use {
+                val idIdx = it.getColumnIndex(android.provider.ContactsContract.Contacts._ID)
+                val nameIdx = it.getColumnIndex(android.provider.ContactsContract.Contacts.DISPLAY_NAME)
+                while (it.moveToNext()) {
+                    val contactId = it.getString(idIdx) ?: continue
+                    val name = it.getString(nameIdx) ?: continue
+                    val phoneNumbers = mutableListOf<String>()
+                    val phoneCursor = service.contentResolver.query(
+                        android.provider.ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
+                        arrayOf(android.provider.ContactsContract.CommonDataKinds.Phone.NUMBER),
+                        "${android.provider.ContactsContract.CommonDataKinds.Phone.CONTACT_ID} = ?",
+                        arrayOf(contactId),
+                        null
+                    )
+                    phoneCursor?.use { pc ->
+                        val numIdx = pc.getColumnIndex(android.provider.ContactsContract.CommonDataKinds.Phone.NUMBER)
+                        while (pc.moveToNext()) {
+                            pc.getString(numIdx)?.let { num -> phoneNumbers.add(num) }
+                        }
                     }
+                    results.add(mapOf("id" to contactId, "name" to name, "phones" to phoneNumbers.joinToString(", ")))
                 }
-                results.add(mapOf("id" to contactId, "name" to name, "phones" to phoneNumbers.joinToString(", ")))
             }
+            if (results.isEmpty()) {
+                ActionResult(false, "No contacts found matching '$query'")
+            } else {
+                ActionResult(true, "Found ${results.size} contacts", mapOf("contacts" to results, "count" to results.size))
+            }
+        } catch (e: SecurityException) {
+            ActionResult(false, "READ_CONTACTS permission denied: ${e.message}")
         }
-        if (results.isEmpty()) {
-            return ActionResult(false, "No contacts found matching '$query'")
-        }
-        return ActionResult(true, "Found ${results.size} contacts", mapOf("contacts" to results, "count" to results.size))
     }
 
     fun sendIntent(action: String, dataUri: String? = null, extras: Map<String, String>? = null, packageOverride: String? = null): ActionResult {
@@ -599,10 +636,14 @@ object ActionExecutor {
     fun sendBroadcast(action: String, extras: Map<String, String>? = null): ActionResult {
         val service = BridgeAccessibilityService.instance
             ?: return ActionResult(false, "Accessibility service not running")
-        val intent = Intent(action)
-        extras?.forEach { (key, value) -> intent.putExtra(key, value) }
-        service.sendBroadcast(intent)
-        return ActionResult(true, "Broadcast sent: $action")
+        return try {
+            val intent = Intent(action)
+            extras?.forEach { (key, value) -> intent.putExtra(key, value) }
+            service.sendBroadcast(intent)
+            ActionResult(true, "Broadcast sent: $action")
+        } catch (e: SecurityException) {
+            ActionResult(false, "Broadcast failed: ${e.message}")
+        }
     }
 
     fun screenHash(): ActionResult {
