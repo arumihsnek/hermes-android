@@ -565,6 +565,54 @@ def android_screen_record(duration_ms: int = 5000) -> str:
         return json.dumps({"error": str(e)})
 
 
+def android_find_nodes(
+    text: str = None, class_name: str = None, clickable: bool = None, limit: int = 20
+) -> str:
+    """
+    Search the current screen for nodes matching criteria.
+    Returns matching nodes without dumping the full accessibility tree.
+    Faster than android_read_screen when looking for specific elements.
+    """
+    try:
+        payload = {"limit": limit}
+        if text:
+            payload["text"] = text
+        if class_name:
+            payload["className"] = class_name
+        if clickable is not None:
+            payload["clickable"] = clickable
+        data = _post("/find_nodes", payload)
+        return json.dumps(data)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+def android_diff_screen(previous_hash: str) -> str:
+    """
+    Compare the current screen state against a previous hash.
+    Returns whether the screen changed and the new hash.
+    Use with android_screen_hash() for efficient change detection.
+    """
+    try:
+        data = _post("/diff_screen", {"previousHash": previous_hash})
+        return json.dumps(data)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+def android_pinch(x: int, y: int, scale: float = 1.5, duration: int = 300) -> str:
+    """
+    Perform a pinch gesture at coordinates (x, y).
+    scale > 1.0 zooms in, scale < 1.0 zooms out.
+    Useful for maps and photo galleries.
+    """
+    try:
+        data = _post("/pinch", {"x": x, "y": y, "scale": scale, "duration": duration})
+        return json.dumps(data)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
 def android_read_widgets() -> str:
     """
     Read home screen widgets (weather, calendar, tasks, etc.) without
@@ -1200,6 +1248,69 @@ _SCHEMAS = {
         "description": "Read home screen widgets (weather, calendar, tasks, etc.). Goes to home screen and reads widget content without opening apps.",
         "parameters": {"type": "object", "properties": {}, "required": []},
     },
+    "android_find_nodes": {
+        "name": "android_find_nodes",
+        "description": "Search the current screen for UI nodes matching text, class name, or clickability. Returns matching nodes without dumping the full tree. Faster than android_read_screen for finding specific elements.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "text": {
+                    "type": "string",
+                    "description": "Text to search for (case-insensitive contains match)",
+                },
+                "class_name": {
+                    "type": "string",
+                    "description": "Android class name to filter by (e.g. android.widget.Button)",
+                },
+                "clickable": {
+                    "type": "boolean",
+                    "description": "Filter by clickability",
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Max results to return (default 20)",
+                    "default": 20,
+                },
+            },
+            "required": [],
+        },
+    },
+    "android_diff_screen": {
+        "name": "android_diff_screen",
+        "description": "Compare current screen against a previous hash. Returns changed status and new hash. Use with android_screen_hash for efficient polling.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "previous_hash": {
+                    "type": "string",
+                    "description": "Previous screen hash from android_screen_hash()",
+                },
+            },
+            "required": ["previous_hash"],
+        },
+    },
+    "android_pinch": {
+        "name": "android_pinch",
+        "description": "Pinch gesture at a point. scale > 1.0 zooms in, scale < 1.0 zooms out. Use for maps and photo galleries.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "x": {"type": "integer", "description": "Center X coordinate"},
+                "y": {"type": "integer", "description": "Center Y coordinate"},
+                "scale": {
+                    "type": "number",
+                    "description": "Zoom scale factor (>1 zoom in, <1 zoom out, default 1.5)",
+                    "default": 1.5,
+                },
+                "duration": {
+                    "type": "integer",
+                    "description": "Gesture duration in ms (default 300)",
+                    "default": 300,
+                },
+            },
+            "required": ["x", "y"],
+        },
+    },
     "android_media": {
         "name": "android_media",
         "description": "Control media playback (play, pause, toggle, next, previous). Works system-wide without opening media apps.",
@@ -1311,6 +1422,9 @@ _HANDLERS = {
     "android_event_stream": lambda args, **kw: android_event_stream(**args),
     "android_screen_record": lambda args, **kw: android_screen_record(**args),
     "android_read_widgets": lambda args, **kw: android_read_widgets(),
+    "android_find_nodes": lambda args, **kw: android_find_nodes(**args),
+    "android_diff_screen": lambda args, **kw: android_diff_screen(**args),
+    "android_pinch": lambda args, **kw: android_pinch(**args),
     "android_media": lambda args, **kw: android_media(**args),
     "android_search_contacts": lambda args, **kw: android_search_contacts(**args),
     "android_send_intent": lambda args, **kw: android_send_intent(**args),
