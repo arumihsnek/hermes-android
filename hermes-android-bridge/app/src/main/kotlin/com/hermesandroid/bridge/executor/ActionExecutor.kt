@@ -16,6 +16,7 @@ import android.view.Display
 import android.view.accessibility.AccessibilityNodeInfo
 import com.hermesandroid.bridge.model.ActionResult
 import com.hermesandroid.bridge.model.ScreenNode
+import com.hermesandroid.bridge.model.computeHash
 import com.hermesandroid.bridge.power.WakeLockManager
 import com.hermesandroid.bridge.service.BridgeAccessibilityService
 import kotlinx.coroutines.delay

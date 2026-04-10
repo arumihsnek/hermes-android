@@ -45,7 +45,9 @@ object EventStore {
             className = event.className?.toString(),
             text = text.ifBlank { null },
             contentDescription = event.contentDescription?.toString(),
-            sourceNodeId = event.sourceNodeId?.toString(),
+            sourceNodeId = event.source?.let { src ->
+                try { src.hashCode().toString() } finally { src.recycle() }
+            },
             timestamp = event.eventTime
         ))
     }
