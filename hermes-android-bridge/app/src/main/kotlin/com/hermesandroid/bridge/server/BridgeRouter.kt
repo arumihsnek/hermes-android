@@ -314,7 +314,9 @@ fun Application.configureRouting() {
         post("/screen_record") {
             data class RecordRequest(val durationMs: Long = 5000)
             val req = call.receive<RecordRequest>()
-            val result = ScreenRecorder.record(req.durationMs)
+            val result = withContext(Dispatchers.IO) {
+                ScreenRecorder.record(req.durationMs)
+            }
             call.respond(result)
         }
 
