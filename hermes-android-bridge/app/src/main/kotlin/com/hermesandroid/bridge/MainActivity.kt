@@ -8,8 +8,10 @@ import android.media.projection.MediaProjectionManager
 import android.net.Uri
 import android.os.Bundle
 import android.provider.Settings
+import android.view.View
 import android.widget.Button
 import android.widget.EditText
+import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
 import com.hermesandroid.bridge.auth.PairingManager
@@ -25,68 +27,50 @@ class MainActivity : Activity() {
         private const val REQUEST_CODE_SCREEN_RECORD = 1001
     }
 
-    // FIGlet "HERMES BRIDGE" in ANSI Shadow style (fits mobile width)
-    private val ASCII_TITLE = """
- ██╗  ██╗███████╗██████╗ ███╗   ███╗███████╗███████╗
- ██║  ██║██╔════╝██╔══██╗████╗ ████║██╔════╝██╔════╝
- ███████║█████╗  ██████╔╝██╔████╔██║█████╗  ███████╗
- ██╔══██║██╔══╝  ██╔══██╗██║╚██╔╝██║██╔══╝  ╚════██║
- ██║  ██║███████╗██║  ██║██║ ╚═╝ ██║███████╗███████║
- ╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝╚═╝     ╚═╝╚══════╝╚══════╝
- ██████╗ ██████╗ ██╗██████╗  ██████╗ ███████╗
- ██╔══██╗██╔══██╗██║██╔══██╗██╔════╝ ██╔════╝
- ██████╔╝██████╔╝██║██║  ██║██║  ███╗█████╗
- ██╔══██╗██╔══██╗██║██║  ██║██║   ██║██╔══╝
- ██████╔╝██║  ██║██║██████╔╝╚██████╔╝███████╗
- ╚═════╝ ╚═╝  ╚═╝╚═╝╚═════╝  ╚═════╝ ╚══════╝""".trimIndent()
+    private lateinit var tvA11yStatus: TextView
+    private lateinit var tvServerStatus: TextView
+    private lateinit var tvRelayAddr: TextView
+    private lateinit var tvAuthCode: TextView
+    private lateinit var indicatorA11y: View
+    private lateinit var indicatorServer: View
+    private lateinit var indicatorRelay: View
+    private lateinit var indicatorAuth: View
+    private lateinit var switchAccessibility: Switch
+    private lateinit var switchOverlay: Switch
+    private lateinit var switchScreenRecord: Switch
+    private lateinit var tvPairingCode: TextView
+    private lateinit var btnRegenerate: Button
+    private lateinit var etServerUrl: EditText
+    private lateinit var tvRelayStatus: TextView
+    private lateinit var btnConnect: Button
+    private lateinit var btnDisconnect: Button
+    private lateinit var tvAddress: TextView
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        // Set ASCII title
-        findViewById<TextView>(R.id.tvAsciiTitle).text = ASCII_TITLE
+        tvA11yStatus = findViewById(R.id.tvA11yStatus)
+        tvServerStatus = findViewById(R.id.tvServerStatus)
+        tvRelayAddr = findViewById(R.id.tvRelayAddr)
+        tvAuthCode = findViewById(R.id.tvAuthCode)
+        indicatorA11y = findViewById(R.id.indicatorA11y)
+        indicatorServer = findViewById(R.id.indicatorServer)
+        indicatorRelay = findViewById(R.id.indicatorRelay)
+        indicatorAuth = findViewById(R.id.indicatorAuth)
+        switchAccessibility = findViewById(R.id.switchAccessibility)
+        switchOverlay = findViewById(R.id.switchOverlay)
+        switchScreenRecord = findViewById(R.id.switchScreenRecord)
+        tvPairingCode = findViewById(R.id.tvPairingCode)
+        btnRegenerate = findViewById(R.id.btnRegenerate)
+        etServerUrl = findViewById(R.id.etServerUrl)
+        tvRelayStatus = findViewById(R.id.tvRelayStatus)
+        btnConnect = findViewById(R.id.btnConnect)
+        btnDisconnect = findViewById(R.id.btnDisconnect)
+        tvAddress = findViewById(R.id.tvAddress)
 
-        // Pairing code
-        updatePairingCode()
-
-        findViewById<Button>(R.id.btnRegenerate).setOnClickListener {
-            PairingManager.regenerateCode()
-            updatePairingCode()
-            Toast.makeText(this, "New pairing code generated", Toast.LENGTH_SHORT).show()
-        }
-
-        // Tap pairing code to copy
-        findViewById<TextView>(R.id.tvPairingCode).setOnClickListener {
-            val clipboard = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
-            clipboard.setPrimaryClip(ClipData.newPlainText("Hermes pairing code", PairingManager.getCode()))
-            Toast.makeText(this, "Pairing code copied", Toast.LENGTH_SHORT).show()
-        }
-
-        // Permissions
-        findViewById<Button>(R.id.btnAccessibility).setOnClickListener {
-            startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
-        }
-
-        findViewById<Button>(R.id.btnOverlay).setOnClickListener {
-            if (!Settings.canDrawOverlays(this)) {
-                startActivity(Intent(
-                    Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                    Uri.parse("package:$packageName")
-                ))
-            } else {
-                StatusOverlay.show(this)
-            }
-        }
-
-        findViewById<Button>(R.id.btnScreenRecord).setOnClickListener {
-            val mpm = getSystemService(MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
-            startActivityForResult(mpm.createScreenCaptureIntent(), REQUEST_CODE_SCREEN_RECORD)
-        }
-
-        updateScreenRecordStatus()
-
-        // Relay server connection
+        setupPairingCode()
+        setupPermissions()
         setupRelayConnection()
 
         updateConnectionInfo()
@@ -96,8 +80,7 @@ class MainActivity : Activity() {
     override fun onResume() {
         super.onResume()
         updateStatus()
-        updateRelayButton()
-        updateScreenRecordStatus()
+        updatePermissionSwitches()
     }
 
     @Deprecated("Deprecated in Java")
@@ -115,111 +98,164 @@ class MainActivity : Activity() {
             } else {
                 Toast.makeText(this, "Screen recording permission denied", Toast.LENGTH_SHORT).show()
             }
-            updateScreenRecordStatus()
+            updatePermissionSwitches()
         }
     }
 
-    private fun updateScreenRecordStatus() {
-        val btn = findViewById<Button>(R.id.btnScreenRecord)
-        val tv = findViewById<TextView>(R.id.tvScreenRecordStatus)
-        if (ScreenRecorder.hasPermission()) {
-            btn.text = "> Screen Recording: Granted"
-            tv.text = "[*] screen record: permission granted"
-        } else {
-            btn.text = "> Grant Screen Recording"
-            tv.text = ""
+    private fun setupPairingCode() {
+        tvPairingCode.text = PairingManager.getCode()
+
+        btnRegenerate.setOnClickListener {
+            PairingManager.regenerateCode()
+            tvPairingCode.text = PairingManager.getCode()
+            updateStatus()
+            Toast.makeText(this, "New pairing code generated", Toast.LENGTH_SHORT).show()
         }
+
+        tvPairingCode.setOnClickListener {
+            val clipboard = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
+            clipboard.setPrimaryClip(ClipData.newPlainText("Hermes pairing code", PairingManager.getCode()))
+            Toast.makeText(this, "Pairing code copied", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun setupPermissions() {
+        switchAccessibility.setOnCheckedChangeListener { _, isChecked ->
+            if (isChecked && BridgeAccessibilityService.instance == null) {
+                startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+            }
+        }
+
+        switchOverlay.setOnCheckedChangeListener { _, isChecked ->
+            if (isChecked) {
+                if (!Settings.canDrawOverlays(this)) {
+                    startActivity(Intent(
+                        Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                        Uri.parse("package:$packageName")
+                    ))
+                } else {
+                    StatusOverlay.show(this)
+                }
+            } else {
+                StatusOverlay.hide(this)
+            }
+        }
+
+        switchScreenRecord.setOnCheckedChangeListener { _, isChecked ->
+            if (isChecked && !ScreenRecorder.hasPermission()) {
+                val mpm = getSystemService(MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
+                startActivityForResult(mpm.createScreenCaptureIntent(), REQUEST_CODE_SCREEN_RECORD)
+            }
+        }
+    }
+
+    private fun updatePermissionSwitches() {
+        switchAccessibility.setOnCheckedChangeListener(null)
+        switchOverlay.setOnCheckedChangeListener(null)
+        switchScreenRecord.setOnCheckedChangeListener(null)
+
+        switchAccessibility.isChecked = BridgeAccessibilityService.instance != null
+        switchOverlay.isChecked = Settings.canDrawOverlays(this)
+        switchScreenRecord.isChecked = ScreenRecorder.hasPermission()
+
+        setupPermissions()
     }
 
     private fun setupRelayConnection() {
-        val etServerUrl = findViewById<EditText>(R.id.etServerUrl)
-        val btnConnect = findViewById<Button>(R.id.btnConnect)
-        val tvRelayStatus = findViewById<TextView>(R.id.tvRelayStatus)
-
-        // Load saved server URL
         val savedUrl = RelayClient.serverUrl
         if (!savedUrl.isNullOrBlank()) {
             etServerUrl.setText(savedUrl)
         }
 
-        // Status callback
         RelayClient.onStatusChanged = { connected, message ->
-            tvRelayStatus.text = if (connected) "[*] $message" else "[ ] $message"
+            tvRelayStatus.text = message
             tvRelayStatus.setTextColor(
                 if (connected) 0xFF4CAF50.toInt() else 0xFF888888.toInt()
             )
-            btnConnect.text = if (connected || RelayClient.isConnected)
-                "> DISCONNECT" else "> CONNECT"
-            btnConnect.setBackgroundColor(
-                if (connected || RelayClient.isConnected) 0xFFFF5722.toInt() else 0xFF4CAF50.toInt()
+            btnDisconnect.visibility = if (connected || RelayClient.isConnected) View.VISIBLE else View.GONE
+            btnConnect.text = if (RelayClient.isConnected) "CONNECTED" else "CONNECT"
+            btnConnect.background = getDrawable(
+                if (RelayClient.isConnected) R.drawable.bg_input_dark else R.drawable.bg_button_orange
+            )
+            btnConnect.setTextColor(
+                if (RelayClient.isConnected) 0xFF4CAF50.toInt() else 0xFF1A1A1A.toInt()
             )
             updateStatus()
         }
 
-        // Update button state based on current connection
-        updateRelayButton()
-
         btnConnect.setOnClickListener {
-            if (RelayClient.isConnected) {
-                RelayClient.disconnect()
-                btnConnect.text = "Connect to Server"
-                tvRelayStatus.text = "Disconnected"
-                tvRelayStatus.setTextColor(0xFF888888.toInt())
-            } else {
-                val url = etServerUrl.text.toString().trim()
-                if (url.isBlank()) {
-                    Toast.makeText(this, "Enter a server URL", Toast.LENGTH_SHORT).show()
-                    return@setOnClickListener
-                }
-                val code = PairingManager.getCode()
-                RelayClient.connect(url, code)
+            if (RelayClient.isConnected) return@setOnClickListener
+            val url = etServerUrl.text.toString().trim()
+            if (url.isBlank()) {
+                Toast.makeText(this, "Enter a server URL", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
             }
+            val code = PairingManager.getCode()
+            RelayClient.connect(url, code)
+        }
+
+        btnDisconnect.setOnClickListener {
+            RelayClient.disconnect()
+            btnDisconnect.visibility = View.GONE
+            btnConnect.text = "CONNECT"
+            btnConnect.background = getDrawable(R.drawable.bg_button_orange)
+            btnConnect.setTextColor(0xFF1A1A1A.toInt())
             updateStatus()
         }
+
+        updateRelayButton()
     }
 
     private fun updateRelayButton() {
-        val btnConnect = findViewById<Button>(R.id.btnConnect)
-        val tvRelayStatus = findViewById<TextView>(R.id.tvRelayStatus)
         if (RelayClient.isConnected) {
-            btnConnect.text = "> DISCONNECT"
-            btnConnect.setBackgroundColor(0xFFFF5722.toInt())
-            tvRelayStatus.text = "[*] Connected to ${RelayClient.serverUrl}"
+            btnDisconnect.visibility = View.VISIBLE
+            btnConnect.text = "CONNECTED"
+            btnConnect.background = getDrawable(R.drawable.bg_input_dark)
+            btnConnect.setTextColor(0xFF4CAF50.toInt())
+            tvRelayStatus.text = "Connected to ${RelayClient.serverUrl}"
             tvRelayStatus.setTextColor(0xFF4CAF50.toInt())
         } else {
-            btnConnect.text = "> CONNECT"
-            btnConnect.setBackgroundColor(0xFF4CAF50.toInt())
+            btnDisconnect.visibility = View.GONE
+            btnConnect.text = "CONNECT"
+            btnConnect.background = getDrawable(R.drawable.bg_button_orange)
+            btnConnect.setTextColor(0xFF1A1A1A.toInt())
         }
-    }
-
-    private fun updatePairingCode() {
-        findViewById<TextView>(R.id.tvPairingCode).text = PairingManager.getCode()
     }
 
     private fun updateConnectionInfo() {
         val ip = getLocalIpAddress()
-        findViewById<TextView>(R.id.tvAddress).text =
-            "Local: http://$ip:8765 (USB/LAN only)"
+        tvAddress.text = "http://$ip:8765 (USB/LAN)"
     }
 
     private fun updateStatus() {
         val serviceRunning = BridgeAccessibilityService.instance != null
         val relayConnected = RelayClient.isConnected
-        val tvStatus = findViewById<TextView>(R.id.tvStatus)
-        tvStatus.text = buildString {
-            if (serviceRunning) append("[*] a11y: active")
-            else append("[ ] a11y: inactive")
-            append("\n[*] server: :8765")
-            if (relayConnected) {
-                append("\n[*] relay: ${RelayClient.serverUrl}")
-            } else if (!RelayClient.serverUrl.isNullOrBlank()) {
-                append("\n[ ] relay: disconnected")
-            }
-            append("\n[*] auth: ${PairingManager.getCode()}")
-        }
-        tvStatus.setTextColor(
-            if (serviceRunning && relayConnected) 0xFF4CAF50.toInt() else 0xFFFF9800.toInt()
+
+        tvA11yStatus.text = if (serviceRunning) "active" else "inactive"
+        tvA11yStatus.setTextColor(if (serviceRunning) 0xFF4CAF50.toInt() else 0xFF888888.toInt())
+        indicatorA11y.setBackgroundResource(
+            if (serviceRunning) R.drawable.bg_status_dot_green else R.drawable.bg_status_dot_grey
         )
+
+        tvServerStatus.text = "8765"
+        tvServerStatus.setTextColor(0xFF4CAF50.toInt())
+
+        if (relayConnected) {
+            tvRelayAddr.text = RelayClient.serverUrl
+            tvRelayAddr.setTextColor(0xFF4CAF50.toInt())
+            indicatorRelay.setBackgroundResource(R.drawable.bg_status_dot_green)
+        } else if (!RelayClient.serverUrl.isNullOrBlank()) {
+            tvRelayAddr.text = "disconnected"
+            tvRelayAddr.setTextColor(0xFF888888.toInt())
+            indicatorRelay.setBackgroundResource(R.drawable.bg_status_dot_red)
+        } else {
+            tvRelayAddr.text = "—"
+            tvRelayAddr.setTextColor(0xFF555555.toInt())
+            indicatorRelay.setBackgroundResource(R.drawable.bg_status_dot_grey)
+        }
+
+        tvAuthCode.text = PairingManager.getCode()
+        tvAuthCode.setTextColor(0xFF4CAF50.toInt())
     }
 
     private fun getLocalIpAddress(): String {
