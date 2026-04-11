@@ -2,6 +2,7 @@ package com.hermesandroid.bridge.service
 
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.AccessibilityServiceInfo
+import android.content.pm.ServiceInfo
 import android.os.Build
 import android.view.accessibility.AccessibilityEvent
 
@@ -63,7 +64,13 @@ class BridgeAccessibilityService : AccessibilityService() {
                 .setOngoing(true)
                 .build()
         }
-        startForeground(1, notification)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            startForeground(1, notification,
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE or
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION)
+        } else {
+            startForeground(1, notification)
+        }
         isForeground = true
     }
 

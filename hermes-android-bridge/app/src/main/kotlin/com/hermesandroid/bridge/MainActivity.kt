@@ -11,13 +11,19 @@ import android.widget.EditText
 import android.widget.TextView
 import android.widget.Toast
 import android.app.Activity
+import android.media.projection.MediaProjectionManager
 import com.hermesandroid.bridge.auth.PairingManager
+import com.hermesandroid.bridge.media.ScreenRecorder
 import com.hermesandroid.bridge.client.RelayClient
 import com.hermesandroid.bridge.overlay.StatusOverlay
 import com.hermesandroid.bridge.service.BridgeAccessibilityService
 import java.net.NetworkInterface
 
 class MainActivity : Activity() {
+
+    private companion object {
+        const val REQUEST_MEDIA_PROJECTION = 1001
+    }
 
     // FIGlet "HERMES BRIDGE" in ANSI Shadow style (fits mobile width)
     private val ASCII_TITLE = """
@@ -73,11 +79,37 @@ class MainActivity : Activity() {
             }
         }
 
+        findViewById<Button>(R.id.btnScreenRecord).setOnClickListener {
+            if (ScreenRecorder.hasPermission()) {
+                Toast.makeText(this, "Screen recording already granted", Toast.LENGTH_SHORT).show()
+            } else {
+                val mpm = getSystemService(MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
+                @Suppress("DEPRECATION")
+                startActivityForResult(mpm.createScreenCaptureIntent(), REQUEST_MEDIA_PROJECTION)
+            }
+        }
+
         // Relay server connection
         setupRelayConnection()
 
         updateConnectionInfo()
         updateStatus()
+    }
+
+    @Suppress("DEPRECATION")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == REQUEST_MEDIA_PROJECTION) {
+            if (resultCode == RESULT_OK && data != null) {
+                val mpm = getSystemService(MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
+                val projection = mpm.getMediaProjection(resultCode, data)
+                ScreenRecorder.setProjection(projection)
+                Toast.makeText(this, "Screen recording permission granted", Toast.LENGTH_SHORT).show()
+                findViewById<Button>(R.id.btnScreenRecord).text = "[*] Screen Recording Granted"
+            } else {
+                Toast.makeText(this, "Screen recording permission denied", Toast.LENGTH_SHORT).show()
+            }
+        }
     }
 
     override fun onResume() {

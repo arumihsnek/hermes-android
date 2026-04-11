@@ -105,6 +105,20 @@
         android:background="#2A2A2A"
         android:gravity="start|center_vertical"
         android:paddingStart="12dp"
+        android:layout_marginBottom="4dp"
+        android:textAllCaps="false" />
+
+    <Button
+        android:id="@+id/btnScreenRecord"
+        android:layout_width="match_parent"
+        android:layout_height="40dp"
+        android:text="> Grant Screen Recording"
+        android:textSize="12sp"
+        android:textColor="#4CAF50"
+        android:fontFamily="monospace"
+        android:background="#2A2A2A"
+        android:gravity="start|center_vertical"
+        android:paddingStart="12dp"
         android:layout_marginBottom="12dp"
         android:textAllCaps="false" />
 

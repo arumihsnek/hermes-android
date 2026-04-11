@@ -46,7 +46,11 @@ object EventStore {
             text = text.ifBlank { null },
             contentDescription = event.contentDescription?.toString(),
             sourceNodeId = event.source?.let { src ->
-                try { src.hashCode().toString() } finally { src.recycle() }
+                try {
+                    val r = android.graphics.Rect()
+                    src.getBoundsInScreen(r)
+                    "${src.packageName ?: "?"}_${src.className ?: "?"}_${r.left}_${r.top}_${r.right}_${r.bottom}"
+                } finally { src.recycle() }
             },
             timestamp = event.eventTime
         ))

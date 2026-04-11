@@ -10,6 +10,7 @@
     <!-- Foreground service to keep bridge alive -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
     <!-- Screenshots via MediaProjection (Phase 2 enhancement) -->
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
     <!-- Query all installed apps (Android 11+) -->
@@ -42,7 +43,7 @@
         <service
             android:name=".service.BridgeAccessibilityService"
             android:exported="true"
-            android:foregroundServiceType="specialUse"
+            android:foregroundServiceType="specialUse|mediaProjection"
             android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
             <intent-filter>
                 <action android:name="android.accessibilityservice.AccessibilityService" />
