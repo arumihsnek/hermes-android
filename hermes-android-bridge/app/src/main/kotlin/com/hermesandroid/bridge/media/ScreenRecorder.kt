@@ -65,7 +65,7 @@ object ScreenRecorder {
                 val vd = proj.createVirtualDisplay(
                     "ScreenRecorder", width, height, density,
                     DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
-                    mr.surface, handler, null
+                    mr.surface, null, handler
                 )
                 virtualDisplay = vd
 
