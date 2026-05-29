@@ -19,6 +19,7 @@ import com.hermesandroid.bridge.client.RelayClient
 import com.hermesandroid.bridge.media.ScreenRecorder
 import com.hermesandroid.bridge.overlay.StatusOverlay
 import com.hermesandroid.bridge.service.BridgeAccessibilityService
+import com.hermesandroid.bridge.shizuku.ShizukuExecutor
 import java.net.NetworkInterface
 
 class MainActivity : Activity() {
@@ -26,6 +27,9 @@ class MainActivity : Activity() {
     companion object {
         private const val REQUEST_CODE_SCREEN_RECORD = 1001
     }
+
+    // Ask for Shizuku permission at most once per app session.
+    private var shizukuPermissionRequested = false
 
     private lateinit var tvA11yStatus: TextView
     private lateinit var tvServerStatus: TextView
@@ -81,6 +85,24 @@ class MainActivity : Activity() {
         super.onResume()
         updateStatus()
         updatePermissionSwitches()
+        maybeRequestShizukuPermission()
+    }
+
+    /**
+     * If Shizuku is running but hasn't granted us shell access yet, surface its permission
+     * dialog once. Silently no-ops when Shizuku isn't installed/running.
+     */
+    private fun maybeRequestShizukuPermission() {
+        if (shizukuPermissionRequested) return
+        if (ShizukuExecutor.isRunning() && !ShizukuExecutor.hasPermission()) {
+            shizukuPermissionRequested = true
+            ShizukuExecutor.requestPermission()
+            Toast.makeText(
+                this,
+                "Approve Shizuku access to enable privileged terminal (android_shell backend=shizuku)",
+                Toast.LENGTH_LONG
+            ).show()
+        }
     }
 
     @Deprecated("Deprecated in Java")

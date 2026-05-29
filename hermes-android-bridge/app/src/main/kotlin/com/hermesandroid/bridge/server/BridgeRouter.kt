@@ -5,6 +5,7 @@ import com.hermesandroid.bridge.auth.PairingManager
 import com.hermesandroid.bridge.model.ScreenNode
 import com.hermesandroid.bridge.executor.ActionExecutor
 import com.hermesandroid.bridge.executor.ScreenReader
+import com.hermesandroid.bridge.executor.TerminalExecutor
 import com.hermesandroid.bridge.media.ScreenRecorder
 import com.hermesandroid.bridge.event.EventStore
 import com.hermesandroid.bridge.notification.NotificationStore
@@ -336,6 +337,33 @@ fun Application.configureRouting() {
 
         post("/stop_speaking") {
             val result = ActionExecutor.stopSpeaking()
+            call.respond(result)
+        }
+
+        post("/shell") {
+            data class ShellRequest(
+                val command: String,
+                val timeoutMs: Long = 10_000,
+                val backend: String = "auto"
+            )
+            val req = call.receive<ShellRequest>()
+            val result = withContext(Dispatchers.IO) {
+                TerminalExecutor.exec(req.command, req.timeoutMs, req.backend)
+            }
+            call.respond(mapOf(
+                "stdout" to result.stdout,
+                "stderr" to result.stderr,
+                "exitCode" to result.exitCode,
+                "timedOut" to result.timedOut,
+                "backend" to result.backend,
+                "success" to (result.exitCode == 0)
+            ))
+        }
+
+        get("/shell/status") {
+            val result = withContext(Dispatchers.IO) {
+                TerminalExecutor.status()
+            }
             call.respond(result)
         }
     }

@@ -34,7 +34,7 @@ mkdir -p ~/.hermes/plugins
 cp -r hermes-android-plugin ~/.hermes/plugins/hermes-android
 ```
 
-Restart hermes — run `/plugins` to verify. Should show: `✓ hermes-android v0.3.0 (38 tools)`
+Restart hermes — run `/plugins` to verify. Should show: `✓ hermes-android v0.4.0 (40 tools)`
 
 ## Quick Start
 
@@ -106,7 +106,7 @@ The car head unit needs network access to reach the relay server:
 All other tools (tap, swipe, type, screenshot, read screen, open apps, etc.) work normally.
 
 
-## Tools (38)
+## Tools (40)
 
 | Tool | Description |
 |------|-------------|
@@ -147,6 +147,46 @@ All other tools (tap, swipe, type, screenshot, read screen, open apps, etc.) wor
 | `android_read_widgets` | Read home screen widgets |
 | `android_speak` | Text-to-speech output |
 | `android_speak_stop` | Stop text-to-speech |
+| `android_shell` | Run a shell command (app / shizuku / termux / root backend) |
+| `android_shell_status` | Report which shell backends are available |
+
+## Terminal / Shell Access
+
+The bridge can run shell commands on the device via `android_shell`. There are four backends, in increasing order of privilege:
+
+| Backend | Privilege level | Requirements | Good for |
+|---------|-----------------|--------------|----------|
+| `app` | App sandbox UID (unprivileged) | None — always available | `getprop`, reading app files, simple `ls`, network checks |
+| `shizuku` | `shell` / ADB (UID 2000) | [Shizuku](https://shizuku.rikka.app/) installed, started, and permission granted | `pm`, `am`, `settings`, `dumpsys`, `cmd` — **system access without root** |
+| `termux` | Termux user environment | [Termux](https://termux.dev/) installed + `allow-external-apps=true` | `python`, `pip`, `git`, `ssh`, `nmap`, the whole `pkg`/`apt` ecosystem |
+| `root` | root | Rooted device with `su` | Full system access |
+
+Call `android_shell_status()` to see what's available; `backend="auto"` (the default) uses Shizuku if granted, otherwise the app sandbox.
+
+### Shizuku setup (no root, recommended)
+
+1. Install the **Shizuku** app from the Play Store / F-Droid / GitHub.
+2. Start the Shizuku service:
+   - **Wireless debugging** (Android 11+): follow Shizuku's in-app instructions — no PC needed.
+   - **ADB**: `adb shell sh /storage/emulated/0/Android/data/moe.shizuku.privileged.api/start.sh`
+3. Open **Hermes Bridge** once — it will request Shizuku permission. Approve it.
+4. Verify with `android_shell_status()` → `shizuku.available: true`.
+
+> Shizuku grants `shell`-level (UID 2000) access — the same as `adb shell`. The privilege survives reboots only while the Shizuku service is restarted (re-run step 2 after each reboot, unless rooted).
+
+### Termux setup (full package ecosystem)
+
+1. Install **Termux** (use the **F-Droid** or GitHub build — the Play Store build is outdated).
+2. Enable external command execution:
+   ```bash
+   mkdir -p ~/.termux
+   echo 'allow-external-apps=true' >> ~/.termux/termux.properties
+   ```
+   Then fully restart Termux.
+3. (Optional) Install tools you want the agent to use: `pkg install python git openssh nmap`.
+4. Verify with `android_shell_status()` → `termux.installed: true`, then e.g. `android_shell("python3 --version", backend="termux")`.
+
+> Termux commands run as Termux's user inside its own prefix (`/data/data/com.termux/files`). Give long timeouts for installs/builds: `android_shell("pkg install -y python", backend="termux", timeout_ms=180000)`.
 
 ## Permissions
 

@@ -34,6 +34,15 @@ to the user what you're about to do and wait for approval.
 Example: "I'm about to confirm an Uber ride to [destination] for [price].
 Reply 'yes' to confirm."
 
+### Terminal / shell access
+Use android_shell(command, timeout_ms, backend) to run shell commands on the
+device, and android_shell_status() to discover available backends first.
+Backends: "app" (unprivileged, always works), "shizuku" (shell/ADB UID 2000,
+no root — needs the Shizuku app paired + permission granted), "termux" (host
+Termux env with the pkg/apt ecosystem — needs allow-external-apps=true), and
+"root" (su, rooted devices). "auto" uses shizuku if granted, else app.
+Treat shell access as powerful: confirm destructive commands with the user.
+
 ## Common package names
 - com.ubercab — Uber
 - com.bolt.client — Bolt

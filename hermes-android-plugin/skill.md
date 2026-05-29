@@ -48,7 +48,7 @@ After the user taps Connect on their phone, the phone connects to this server vi
 
 ## Available Tools
 
-You have these 38 tools. Use them by name — they are function calls.
+You have these 40 tools. Use them by name — they are function calls.
 
 ### Connectivity
 - `android_ping()` — check if phone is connected and responding
@@ -79,6 +79,27 @@ You have these 38 tools. Use them by name — they are function calls.
 
 ### Waiting
 - `android_wait(text, class_name, timeout_ms=5000)` — poll until an element appears. Use after navigation or loading.
+
+### Terminal / Shell
+- `android_shell_status()` — report which shell backends are available (app, root, shizuku, termux) and which one `auto` resolves to. **Call this first when you need a terminal.**
+- `android_shell(command, timeout_ms=10000, backend="auto")` — run a shell command on the device. Returns `stdout`, `stderr`, `exitCode`, and the `backend` used.
+
+**Backends:**
+
+| backend | Privilege | Needs | Use for |
+|---------|-----------|-------|---------|
+| `app` | App sandbox UID (unprivileged) | nothing — always works | reading own files, `getprop`, basic `ls`, network checks |
+| `shizuku` | `shell`/ADB (UID 2000) | Shizuku app installed + paired + permission granted | `pm`, `settings`, `dumpsys`, `am`, reading most system state — **no root** |
+| `termux` | Termux user env | Termux installed + `allow-external-apps=true` | `python`, `pip`, `git`, `ssh`, `nmap`, anything from `pkg`/`apt` |
+| `root` | root | rooted device with `su` | full system access |
+
+- `backend="auto"` picks `shizuku` if granted, otherwise `app`.
+- For Termux, give a generous `timeout_ms` (installs/builds are slow), e.g. `android_shell("pip install requests", backend="termux", timeout_ms=120000)`.
+- If `shizuku`/`termux` come back unavailable, tell the user the one-time setup needed (see below) instead of silently falling back.
+
+**One-time setup the user may need:**
+- *Shizuku*: install the Shizuku app, start it (via wireless debugging/ADB), open Hermes Bridge once and approve the Shizuku permission prompt.
+- *Termux*: install Termux (F-Droid build), run `mkdir -p ~/.termux && echo 'allow-external-apps=true' >> ~/.termux/termux.properties` and restart Termux.
 
 ## Rules
 
