@@ -701,6 +701,45 @@ def android_broadcast(action: str, extras: dict = None) -> str:
         return json.dumps({"error": str(e)})
 
 
+def android_shell(command: str, timeout_ms: int = 10000, backend: str = "auto") -> str:
+    """
+    Execute a shell command on the Android device and return stdout/stderr/exitCode.
+
+    Backends (pick with `backend`):
+      - "auto"    : best available — shizuku if granted, else app (default)
+      - "app"     : the bridge app's own UID (unprivileged sandbox). Always works.
+      - "shizuku" : shell/ADB privileges (UID 2000) via Shizuku — no root needed
+      - "termux"  : run inside the host's Termux env (pkg/apt: python, git, ssh, nmap…)
+      - "root"    : run via `su -c` (rooted devices only)
+
+    Call android_shell_status() first to see which backends are available.
+    Example: android_shell("getprop ro.build.version.release")
+    Example: android_shell("pip install requests", backend="termux", timeout_ms=120000)
+    """
+    try:
+        data = _post(
+            "/shell",
+            {"command": command, "timeoutMs": timeout_ms, "backend": backend},
+        )
+        return json.dumps(data)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+def android_shell_status() -> str:
+    """
+    Report which shell backends are available on the device:
+    app (always), root (su present), shizuku (installed/running/permission), termux (installed).
+    Also returns the backend that "auto" currently resolves to.
+    Call this before android_shell when you need privileged or Termux execution.
+    """
+    try:
+        data = _get("/shell/status")
+        return json.dumps(data)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
 def _get_public_ip() -> str:
     """Detect this server's public IP address."""
     for service in [
@@ -1401,6 +1440,47 @@ _SCHEMAS = {
             "required": ["action"],
         },
     },
+    "android_shell": {
+        "name": "android_shell",
+        "description": (
+            "Execute a shell command on the Android device and return stdout, stderr, and exit code. "
+            "Choose a backend: 'auto' (shizuku if granted else app), 'app' (unprivileged app UID), "
+            "'shizuku' (shell/ADB privileges, UID 2000, no root), 'termux' (host Termux env with "
+            "pkg/apt ecosystem: python, git, ssh, nmap), or 'root' (su -c, rooted devices). "
+            "Call android_shell_status first to see what is available. "
+            "Useful for: system properties (getprop), files (ls), network (ping, netstat), "
+            "logs (logcat -d), package management, and diagnostics."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "command": {
+                    "type": "string",
+                    "description": "Shell command to execute, e.g. 'getprop ro.build.version.release'",
+                },
+                "timeout_ms": {
+                    "type": "integer",
+                    "description": "Max time to wait in milliseconds (default 10000)",
+                    "default": 10000,
+                },
+                "backend": {
+                    "type": "string",
+                    "description": "Execution backend: auto, app, shizuku, termux, or root",
+                    "enum": ["auto", "app", "shizuku", "termux", "root"],
+                    "default": "auto",
+                },
+            },
+            "required": ["command"],
+        },
+    },
+    "android_shell_status": {
+        "name": "android_shell_status",
+        "description": (
+            "Report which shell backends are available on the device (app, root, shizuku, termux) "
+            "and which backend 'auto' resolves to. Call before android_shell for privileged/Termux use."
+        ),
+        "parameters": {"type": "object", "properties": {}, "required": []},
+    },
 }
 
 # ── Tool handlers map ──────────────────────────────────────────────────────────
@@ -1444,4 +1524,6 @@ _HANDLERS = {
     "android_search_contacts": lambda args, **kw: android_search_contacts(**args),
     "android_send_intent": lambda args, **kw: android_send_intent(**args),
     "android_broadcast": lambda args, **kw: android_broadcast(**args),
+    "android_shell": lambda args, **kw: android_shell(**args),
+    "android_shell_status": lambda args, **kw: android_shell_status(),
 }

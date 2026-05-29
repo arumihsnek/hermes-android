@@ -11,12 +11,13 @@ android {
         applicationId = "com.hermesandroid.bridge"
         minSdk = 26
         targetSdk = 34
-        versionCode = 1
-        versionName = "0.2.0"
+        versionCode = 2
+        versionName = "0.4.0"
     }
 
     buildFeatures {
         buildConfig = true
+        aidl = true
     }
 
     buildTypes {
@@ -59,6 +60,9 @@ dependencies {
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.gson)
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    // Shizuku — run shell commands with ADB (shell, UID 2000) privileges without root
+    implementation(libs.shizuku.api)
+    implementation(libs.shizuku.provider)
     testImplementation(libs.junit)
     testImplementation(libs.mockk)
     testImplementation(libs.robolectric)
