@@ -2,4 +2,14 @@
 <resources>
     <string name="app_name">Hermes Bridge</string>
     <string name="accessibility_description">Hermes Bridge accessibility service — allows hermes-agent to read and interact with the Android screen.</string>
+    
+    <!-- Google Sign-In -->
+    <string name="google_web_client_id">YOUR_WEB_CLIENT_ID.apps.googleusercontent.com</string>
+    <string name="google_sign_in_button_text">Sign in with Google</string>
+    <string name="google_sign_in_loading">Signing in...</string>
+    <string name="google_sign_in_error">Google Sign-In failed. Please try again.</string>
+    <string name="google_sign_in_cancelled">Sign-In was cancelled.</string>
+    <string name="auth_error">Authentication failed. Please try again.</string>
+    <string name="auth_success">Successfully signed in!</string>
+    <string name="logout_button_text">Logout</string>
 </resources>

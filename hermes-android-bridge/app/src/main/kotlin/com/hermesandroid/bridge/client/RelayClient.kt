@@ -517,7 +517,8 @@ object RelayClient {
                     obj.entrySet().forEach { (k, v) -> map[k] = v.asString }
                     map
                 }
-                val result = ActionExecutor.sendBroadcast(action, extras)
+                val packageName = body.get("packageName")?.asString
+                val result = ActionExecutor.sendBroadcast(action, extras, packageName)
                 result to 200
             }
 
@@ -542,6 +543,23 @@ object RelayClient {
             method == "GET" && path == "/widgets" -> {
                 val result = ActionExecutor.readWidgets()
                 result to 200
+            }
+
+            method == "POST" && path == "/shell" -> {
+                val command = body.get("command")?.asString ?: ""
+                val timeoutMs = body.get("timeoutMs")?.asLong ?: 10_000L
+                val backend = body.get("backend")?.asString ?: "auto"
+                val result = withContext(Dispatchers.IO) {
+                    TerminalExecutor.exec(command, timeoutMs, backend)
+                }
+                mapOf(
+                    "stdout" to result.stdout,
+                    "stderr" to result.stderr,
+                    "exitCode" to result.exitCode,
+                    "timedOut" to result.timedOut,
+                    "backend" to result.backend,
+                    "success" to (result.exitCode == 0)
+                ) to 200
             }
 
             else -> {

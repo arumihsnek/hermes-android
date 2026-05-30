@@ -11,25 +11,32 @@ import android.provider.Settings
 import android.view.View
 import android.widget.Button
 import android.widget.EditText
+import android.widget.LinearLayout
 import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
+import com.hermesandroid.bridge.auth.AuthApiClient
+import com.hermesandroid.bridge.auth.GoogleSignInManager
 import com.hermesandroid.bridge.auth.PairingManager
 import com.hermesandroid.bridge.client.RelayClient
 import com.hermesandroid.bridge.media.ScreenRecorder
 import com.hermesandroid.bridge.overlay.StatusOverlay
 import com.hermesandroid.bridge.service.BridgeAccessibilityService
 import com.hermesandroid.bridge.shizuku.ShizukuExecutor
+import kotlinx.coroutines.MainScope
+import kotlinx.coroutines.launch
 import java.net.NetworkInterface
 
 class MainActivity : Activity() {
 
     companion object {
         private const val REQUEST_CODE_SCREEN_RECORD = 1001
+        private const val REQUEST_CODE_GOOGLE_SIGN_IN = 1002
     }
 
     // Ask for Shizuku permission at most once per app session.
     private var shizukuPermissionRequested = false
+    private val scope = MainScope()
 
     private lateinit var tvA11yStatus: TextView
     private lateinit var tvServerStatus: TextView
@@ -49,6 +56,13 @@ class MainActivity : Activity() {
     private lateinit var btnConnect: Button
     private lateinit var btnDisconnect: Button
     private lateinit var tvAddress: TextView
+    
+    // Google Sign-In views
+    private lateinit var googleSignInSection: LinearLayout
+    private lateinit var tvUserEmail: TextView
+    private lateinit var btnGoogleSignIn: Button
+    private lateinit var btnLogout: Button
+    private lateinit var tvAuthStatus: TextView
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -72,10 +86,18 @@ class MainActivity : Activity() {
         btnConnect = findViewById(R.id.btnConnect)
         btnDisconnect = findViewById(R.id.btnDisconnect)
         tvAddress = findViewById(R.id.tvAddress)
+        
+        // Google Sign-In views
+        googleSignInSection = findViewById(R.id.googleSignInSection)
+        tvUserEmail = findViewById(R.id.tvUserEmail)
+        btnGoogleSignIn = findViewById(R.id.btnGoogleSignIn)
+        btnLogout = findViewById(R.id.btnLogout)
+        tvAuthStatus = findViewById(R.id.tvAuthStatus)
 
         setupPairingCode()
         setupPermissions()
         setupRelayConnection()
+        setupGoogleSignIn()
 
         updateConnectionInfo()
         updateStatus()
@@ -122,6 +144,8 @@ class MainActivity : Activity() {
                 Toast.makeText(this, "Screen recording permission denied", Toast.LENGTH_SHORT).show()
             }
             updatePermissionSwitches()
+        } else if (requestCode == REQUEST_CODE_GOOGLE_SIGN_IN) {
+            handleGoogleSignInResult(data)
         }
     }
 
@@ -292,5 +316,149 @@ class MainActivity : Activity() {
             ?.flatMap { it.inetAddresses.toList() }
             ?.firstOrNull { !it.isLoopbackAddress && it.hostAddress?.contains(':') == false }
             ?.hostAddress ?: "localhost"
+    }
+
+    /**
+     * Setup Google Sign-In button and logout button.
+     */
+    private fun setupGoogleSignIn() {
+        // Initialize Google Sign-In manager
+        GoogleSignInManager.init(this)
+
+        // Show the Google Sign-In section
+        googleSignInSection.visibility = View.VISIBLE
+
+        // Check if user is already signed in
+        if (GoogleSignInManager.isSignedIn()) {
+            showSignedInState()
+        } else {
+            showSignedOutState()
+        }
+
+        // Setup sign-in button click
+        btnGoogleSignIn.setOnClickListener {
+            startGoogleSignIn()
+        }
+
+        // Setup logout button click
+        btnLogout.setOnClickListener {
+            logout()
+        }
+    }
+
+    /**
+     * Start the Google Sign-In flow.
+     */
+    private fun startGoogleSignIn() {
+        val signInIntent = GoogleSignInManager.getSignInIntent()
+        if (signInIntent != null) {
+            startActivityForResult(signInIntent, REQUEST_CODE_GOOGLE_SIGN_IN)
+        } else {
+            Toast.makeText(this, getString(R.string.google_sign_in_error), Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    /**
+     * Handle the Google Sign-In result.
+     */
+    private fun handleGoogleSignInResult(data: Intent?) {
+        val account = GoogleSignInManager.handleSignInResult(data)
+        
+        if (account != null && account.idToken != null) {
+            // Successfully signed in with Google
+            showLoadingState(true)
+            
+            // Call backend with Google token
+            scope.launch {
+                val result = AuthApiClient.authenticateWithGoogle(
+                    idToken = account.idToken!!,
+                    email = account.email ?: "",
+                    name = account.displayName
+                )
+                
+                result.onSuccess { authResponse ->
+                    // Store session data
+                    GoogleSignInManager.storeSession(
+                        sessionToken = authResponse.sessionToken,
+                        email = authResponse.email,
+                        name = authResponse.name
+                    )
+                    
+                    showLoadingState(false)
+                    showSignedInState()
+                    
+                    Toast.makeText(
+                        this@MainActivity,
+                        getString(R.string.auth_success),
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+                
+                result.onFailure { error ->
+                    showLoadingState(false)
+                    showSignedOutState()
+                    
+                    Toast.makeText(
+                        this@MainActivity,
+                        getString(R.string.auth_error),
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+            }
+        } else {
+            // Sign-in failed or was cancelled - error already logged by GoogleSignInManager
+            Toast.makeText(
+                this,
+                getString(R.string.google_sign_in_error),
+                Toast.LENGTH_LONG
+            ).show()
+        }
+    }
+
+    /**
+     * Show loading state during authentication.
+     */
+    private fun showLoadingState(loading: Boolean) {
+        btnGoogleSignIn.isEnabled = !loading
+        btnGoogleSignIn.text = if (loading) {
+            getString(R.string.google_sign_in_loading)
+        } else {
+            getString(R.string.google_sign_in_button_text)
+        }
+        tvAuthStatus.visibility = if (loading) View.VISIBLE else View.GONE
+        tvAuthStatus.text = if (loading) "Authenticating..." else ""
+    }
+
+    /**
+     * Show signed-in state.
+     */
+    private fun showSignedInState() {
+        btnGoogleSignIn.visibility = View.GONE
+        btnLogout.visibility = View.VISIBLE
+        tvUserEmail.visibility = View.VISIBLE
+        tvUserEmail.text = GoogleSignInManager.getUserEmail() ?: ""
+        tvAuthStatus.visibility = View.VISIBLE
+        tvAuthStatus.text = "Signed in as ${GoogleSignInManager.getUserName() ?: GoogleSignInManager.getUserEmail()}"
+        tvAuthStatus.setTextColor(0xFF4CAF50.toInt())
+    }
+
+    /**
+     * Show signed-out state.
+     */
+    private fun showSignedOutState() {
+        btnGoogleSignIn.visibility = View.VISIBLE
+        btnLogout.visibility = View.GONE
+        tvUserEmail.visibility = View.GONE
+        tvAuthStatus.visibility = View.GONE
+    }
+
+    /**
+     * Logout and clear session.
+     */
+    private fun logout() {
+        GoogleSignInManager.logout(this) {
+            showSignedOutState()
+            Toast.makeText(this, "Logged out", Toast.LENGTH_SHORT).show()
+        }
     }
 }

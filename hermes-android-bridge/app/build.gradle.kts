@@ -63,7 +63,10 @@ dependencies {
     // Shizuku — run shell commands with ADB (shell, UID 2000) privileges without root
     implementation(libs.shizuku.api)
     implementation(libs.shizuku.provider)
+    // Google Sign-In
+    implementation(libs.play.services.auth)
     testImplementation(libs.junit)
     testImplementation(libs.mockk)
     testImplementation(libs.robolectric)
+    testImplementation(libs.mockwebserver)
 }

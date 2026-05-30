@@ -10,6 +10,7 @@ import android.graphics.Bitmap
 import android.graphics.Path
 import android.os.Build
 import android.os.Bundle
+import android.os.Parcelable
 import android.telephony.SmsManager
 import android.util.Base64
 import android.view.Display
@@ -637,12 +638,31 @@ object ActionExecutor {
         }
     }
 
-    fun sendBroadcast(action: String, extras: Map<String, String>? = null): ActionResult {
+    fun sendBroadcast(
+        action: String,
+        extras: Map<String, String>? = null,
+        packageName: String? = null
+    ): ActionResult {
         val service = BridgeAccessibilityService.instance
             ?: return ActionResult(false, "Accessibility service not running")
         return try {
             val intent = Intent(action)
-            extras?.forEach { (key, value) -> intent.putExtra(key, value) }
+            if (packageName != null) {
+                intent.setPackage(packageName)
+            }
+            extras?.forEach { (key, value) ->
+                // Put as plain String
+                intent.putExtra(key, value)
+                // Tasker's ACTION_TASK may read %par1 as String array or ArrayList
+                if (key.startsWith("%") || key.startsWith("par") || key.startsWith("PAR")) {
+                    intent.putExtra(key, arrayOf(value))
+                    intent.putStringArrayListExtra(key, arrayListOf(value))
+                }
+            }
+            // Android 14+ requires FLAG_RECEIVER_EXPORTED for implicit broadcasts
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                intent.addFlags(Intent.FLAG_RECEIVER_EXPORTED)
+            }
             service.sendBroadcast(intent)
             ActionResult(true, "Broadcast sent: $action")
         } catch (e: SecurityException) {
