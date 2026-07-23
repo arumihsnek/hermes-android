@@ -2,19 +2,90 @@
 
 ## Overview
 This extension adds Android device control to hermes-agent via the `android` toolset.
-It communicates with a bridge app running on an Android device over HTTP.
+It communicates with a bridge app running on an Android device over HTTP/WebSocket.
+
+## Architecture (fork v0.4.0-fork)
+```
+Phone ──WebSocket──▶ Relay (systemd:8766) ──HTTP──▶ Agent
+                           │
+                    on-demand (BroadcastReceiver)
+                    no ADB/Tailscale required
+                    auto-connect via preference
+                    unlock via Shizuku (wm dismiss-keyguard)
+```
 
 ## Setup
 1. Install the bridge APK on the Android device
-2. Grant the bridge app Accessibility Service permission in Settings > Accessibility
-3. Grant SYSTEM_ALERT_WINDOW permission
-4. Set ANDROID_BRIDGE_URL in ~/.hermes/.env (only needed for direct USB/LAN connection):
-   - Same WiFi: `ANDROID_BRIDGE_URL=http://192.168.x.x:8765`
-   - USB (recommended): run `adb forward tcp:8765 tcp:8765` then use `http://localhost:8765`
-   - Remote relay (default): no config needed — `android_setup` starts a relay on port 8766
-5. Install the Python package: `pip install -e ./hermes-android`
-6. Add to hermes-agent model_tools.py _modules: `"tools.android_tool"`
-7. Add "android" toolset to toolsets.py
+2. Grant permissions (auto-granted via Shizuku if available):
+   - Accessibility Service
+   - System Alert Window (Overlay)
+   - Screen Recording (MediaProjection)
+3. Enable Auto-connect Relay toggle in app
+4. Start relay on server: `setup-hermes-relay --start`
+5. Verify: `hermes-phone status`
+
+## Intent-Based Control
+The app responds to broadcast intents (no UI interaction required):
+```bash
+# Start relay
+adb shell am broadcast -n com.hermesandroid.bridge/.service.RelayIntentReceiver \
+  -a com.hermesandroid.bridge.START --es server <HOST:PORT>
+
+# Stop relay
+adb shell am broadcast -n com.hermesandroid.bridge/.service.RelayIntentReceiver \
+  -a com.hermesandroid.bridge.STOP
+
+# Check status
+adb shell am broadcast -n com.hermesandroid.bridge/.service.RelayIntentReceiver \
+  -a com.hermesandroid.bridge.STATUS
+
+# Enable accessibility
+adb shell am broadcast -n com.hermesandroid.bridge/.service.RelayIntentReceiver \
+  -a com.hermesandroid.bridge.ENABLE_A11Y
+
+# Start screen recording
+adb shell am broadcast -n com.hermesandroid.bridge/.service.RelayIntentReceiver \
+  -a com.hermesandroid.bridge.START_SCREEN_RECORD
+
+# Stop screen recording
+adb shell am broadcast -n com.hermesandroid.bridge/.service.RelayIntentReceiver \
+  -a com.hermesandroid.bridge.STOP_SCREEN_RECORD
+```
+
+## HTTP Bridge Endpoints (direct or via relay)
+```
+POST /unlock    — wake + dismiss keyguard
+POST /shell     — run shell command
+POST /tap       — tap coordinates
+POST /type      — type text
+POST /swipe     — swipe direction
+GET  /ping      — check connection
+GET  /screen    — accessibility tree
+GET  /screenshot — capture screen
+GET  /apps      — list installed apps
+POST /intent    — send Android intent
+POST /broadcast — send broadcast intent
+```
+
+## Shell Backends
+| Backend | Privilege | Requirements |
+|---------|-----------|-------------|
+| `app` | App sandbox | None (always available) |
+| `shizuku` | shell/ADB (UID 2000) | Shizuku installed + permission |
+| `termux` | Termux user | Termux + allow-external-apps |
+| `root` | root | Rooted device |
+
+## Permissions
+| Permission | How to Grant | Required For |
+|------------|-------------|--------------|
+| Accessibility | App button → Settings > Accessibility | All tools |
+| Overlay | App button → Settings > Draw over apps | Status overlay |
+| Screen Recording | App button → approve dialog | Screen recording |
+| Location | Settings > Permissions > Location | Location |
+| Contacts | Settings > Permissions > Contacts | Search contacts |
+| SMS | Settings > Permissions > SMS | Send SMS |
+| Phone | Settings > Permissions > Phone | Make calls |
+| Notification Listener | Settings > Special access > Notification access | Read notifications |
 
 ## Tool usage patterns
 
@@ -28,28 +99,8 @@ Use android_tap_text("Continue") over android_tap(x=540, y=1200).
 After opening an app or tapping a button that triggers loading,
 always call android_wait with expected text before next action.
 
-### Confirmation pattern for destructive actions
-Before confirming a purchase, ride, or send action — always report
-to the user what you're about to do and wait for approval.
-Example: "I'm about to confirm an Uber ride to [destination] for [price].
-Reply 'yes' to confirm."
-
-### Terminal / shell access
-Use android_shell(command, timeout_ms, backend) to run shell commands on the
-device, and android_shell_status() to discover available backends first.
-Backends: "app" (unprivileged, always works), "shizuku" (shell/ADB UID 2000,
-no root — needs the Shizuku app paired + permission granted), "termux" (host
-Termux env with the pkg/apt ecosystem — needs allow-external-apps=true), and
-"root" (su, rooted devices). "auto" uses shizuku if granted, else app.
-Treat shell access as powerful: confirm destructive commands with the user.
-
-## Common package names
-- com.ubercab — Uber
-- com.bolt.client — Bolt
-- com.whatsapp — WhatsApp
-- com.spotify.music — Spotify
-- com.google.android.apps.maps — Google Maps
-- com.android.chrome — Chrome
-- com.google.android.gm — Gmail
-- com.instagram.android — Instagram
-- com.twitter.android — X/Twitter
+### Use unlock before interaction
+```bash
+POST /unlock  # wake screen + dismiss keyguard first
+POST /shell   # then interact
+```
