@@ -111,12 +111,76 @@ class MainActivity : Activity() {
         updateStatus()
         updatePermissionSwitches()
         maybeRequestShizukuPermission()
+        autoGrantPermissionsFromPrefs()
     }
 
-    /**
-     * If Shizuku is running but hasn't granted us shell access yet, surface its permission
-     * dialog once. Silently no-ops when Shizuku isn't installed/running.
-     */
+    /** Try to auto-grant permissions that the user has toggled ON. */
+    private fun autoGrantPermissionsFromPrefs() {
+        val prefs = getSharedPreferences("hermes_bridge_prefs", MODE_PRIVATE)
+
+        // Auto-grant overlay if toggle ON but not granted
+        if (prefs.getBoolean("overlay_enabled", false) && !Settings.canDrawOverlays(this)) {
+            try {
+                ShizukuExecutor.exec("pm grant $packageName android.permission.SYSTEM_ALERT_WINDOW", 5000)
+            } catch (_: Exception) {}
+        }
+
+        // Auto-grant screen record if toggle ON but not granted
+        if (prefs.getBoolean("screen_record_enabled", false) && !ScreenRecorder.hasPermission()) {
+            try {
+                ShizukuExecutor.exec("appops set $packageName PROJECT_MEDIA allow", 5000)
+            } catch (_: Exception) {}
+        }
+
+        // Auto-enable accessibility if toggle ON but not active
+        if (prefs.getBoolean("accessibility_enabled", false) && BridgeAccessibilityService.instance == null) {
+            try {
+                val svc = "$packageName/${BridgeAccessibilityService::class.java.canonicalName}"
+                ShizukuExecutor.exec("settings put secure enabled_accessibility_services $svc", 5000)
+                ShizukuExecutor.exec("settings put secure accessibility_enabled 1", 5000)
+            } catch (_: Exception) {}
+        }
+
+        updatePermissionSwitches()
+    }
+
+    private fun setupPermissions() {
+        switchAccessibility.setOnCheckedChangeListener { _, isChecked ->
+            if (isChecked && BridgeAccessibilityService.instance == null) {
+                startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+            }
+        }
+
+        switchOverlay.setOnCheckedChangeListener { _, isChecked ->
+            if (isChecked) {
+                if (!Settings.canDrawOverlays(this)) {
+                    startActivity(Intent(
+                        Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                        Uri.parse("package:$packageName")
+                    ))
+                } else {
+                    StatusOverlay.show(this)
+                }
+            } else {
+                StatusOverlay.hide(this)
+            }
+        }
+
+        switchScreenRecord.setOnCheckedChangeListener { _, isChecked ->
+            if (isChecked && !ScreenRecorder.hasPermission()) {
+                val service = BridgeAccessibilityService.instance
+                if (service == null) {
+                    Toast.makeText(this, "Enable Accessibility Service before screen recording", Toast.LENGTH_LONG).show()
+                    updatePermissionSwitches()
+                } else {
+                    val mpm = getSystemService(MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
+                    startActivityForResult(mpm.createScreenCaptureIntent(), REQUEST_CODE_SCREEN_RECORD)
+                }
+            }
+        }
+    }
+
+    /** Request Shizuku permission if available and not yet granted. */
     private fun maybeRequestShizukuPermission() {
         if (shizukuPermissionRequested) return
         if (ShizukuExecutor.isRunning() && !ShizukuExecutor.hasPermission()) {
@@ -166,42 +230,6 @@ class MainActivity : Activity() {
             val clipboard = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
             clipboard.setPrimaryClip(ClipData.newPlainText("Hermes pairing code", PairingManager.getCode()))
             Toast.makeText(this, "Pairing code copied", Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    private fun setupPermissions() {
-        switchAccessibility.setOnCheckedChangeListener { _, isChecked ->
-            if (isChecked && BridgeAccessibilityService.instance == null) {
-                startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
-            }
-        }
-
-        switchOverlay.setOnCheckedChangeListener { _, isChecked ->
-            if (isChecked) {
-                if (!Settings.canDrawOverlays(this)) {
-                    startActivity(Intent(
-                        Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                        Uri.parse("package:$packageName")
-                    ))
-                } else {
-                    StatusOverlay.show(this)
-                }
-            } else {
-                StatusOverlay.hide(this)
-            }
-        }
-
-        switchScreenRecord.setOnCheckedChangeListener { _, isChecked ->
-            if (isChecked && !ScreenRecorder.hasPermission()) {
-                val service = BridgeAccessibilityService.instance
-                if (service == null) {
-                    Toast.makeText(this, "Enable Accessibility Service before screen recording", Toast.LENGTH_LONG).show()
-                    updatePermissionSwitches()
-                } else {
-                    val mpm = getSystemService(MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
-                    startActivityForResult(mpm.createScreenCaptureIntent(), REQUEST_CODE_SCREEN_RECORD)
-                }
-            }
         }
     }
 
