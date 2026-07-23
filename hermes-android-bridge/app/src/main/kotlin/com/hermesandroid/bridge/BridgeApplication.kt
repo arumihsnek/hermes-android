@@ -14,12 +14,14 @@ class BridgeApplication : Application() {
         PairingManager.init(applicationContext)
         DeviceCapabilities.init(applicationContext)
         WakeLockManager.init(applicationContext)
-        // Terminal backends (app/root always; shizuku/termux when available on device)
         TerminalExecutor.init(applicationContext)
-        BridgeServer.start(port = 8765)
 
-        // Initialize relay client and auto-connect if previously configured
+        // HTTP server is debug-only; production uses intent-driven relay
+        if (BuildConfig.DEBUG) {
+            BridgeServer.start(port = 8765)
+        }
+
+        // Relay is on-demand via Intent. Do NOT auto-connect here.
         RelayClient.init(applicationContext)
-        RelayClient.autoConnect()
     }
 }
