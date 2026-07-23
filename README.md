@@ -2,6 +2,8 @@
 
 Give your AI agent hands. Remote Android device control for [hermes-agent](https://github.com/NousResearch/hermes-agent).
 
+> **Fork by [arumihsnek](https://github.com/arumihsnek/hermes-android)** — Purpose: On-demand relay, intent-driven control, auto-permissions, screen unlock via Shizuku, and zero-config setup. Original repo: [raulvidis/hermes-android](https://github.com/raulvidis/hermes-android).
+
 ## How it works
 
 ```
@@ -243,10 +245,10 @@ This is a working prototype. The vision: **give Hermes its own phone** — a ful
 
 ### v0.2 — Polish & Reliability
 - [ ] TLS/WSS support for encrypted phone-server communication
-- [ ] Persistent relay service (systemd unit, auto-start with gateway)
+- [x] **Persistent relay service** (systemd unit, auto-start with gateway)
 - [ ] Server-side call counter to prevent tool call loops
 - [ ] Better error reporting (screenshot + annotated explanation on failure)
-- [ ] Auto-reconnect relay on gateway restart
+- [x] **Auto-reconnect relay** on gateway restart (exponential backoff)
 
 ### v0.3 — Richer Phone Interaction
 - [x] **Notification listener** — agent reads incoming notifications in real-time
@@ -256,10 +258,14 @@ This is a working prototype. The vision: **give Hermes its own phone** — a ful
 - [x] **Location sharing** — agent knows where the phone is for contextual tasks
 
 ### v0.4 — Multi-Device & Automation
+- [x] **On-demand relay** — BroadcastReceiver + Service, start/stop via intents
+- [x] **Auto-connect toggle** — persistent preference, connects on app start
+- [x] **Auto-permissions** — Shizuku auto-grants overlay, screen record, accessibility
+- [x] **Screen record START/STOP** — non-blocking recorder API
+- [x] **Screen unlock** — wake + dismiss keyguard via Shizuku (`wm dismiss-keyguard`)
 - [ ] **Multiple phones** — connect more than one device to the same relay
 - [ ] **Scheduled automations** — "every morning, check my commute price on Bolt"
 - [ ] **Event triggers** — "when a notification arrives from this app, do X"
-- [ ] **Macro recording** — watch a workflow once, replay it on demand
 
 ### v0.5 — Hermes Gets a Voice
 - [ ] **Phone call capability** — agent can answer and speak in phone calls using TTS/STT
@@ -281,3 +287,47 @@ This is a working prototype. The vision: **give Hermes its own phone** — a ful
 ## Links
 
 - **hermes-agent**: [github.com/NousResearch/hermes-agent](https://github.com/NousResearch/hermes-agent)
+- **Original repo**: [raulvidis/hermes-android](https://github.com/raulvidis/hermes-android)
+- **Fork**: [arumihsnek/hermes-android](https://github.com/arumihsnek/hermes-android)
+
+## Changelog (fork)
+
+### v0.4.0-fork (23 Jul 2026)
+
+On-demand relay, intent-driven control, screen unlock, and auto-permissions.
+
+**Features:**
+- `POST /unlock` — wake screen + dismiss keyguard via Shizuku (`wm dismiss-keyguard`)
+- `POST /shell` — shell commands via relay without ADB/Tailscale
+- BroadcastReceiver for `START/STOP/STATUS/ENABLE_A11Y/ENABLE_SCREEN_RECORD` intents
+- `RelayService` — on-demand foreground service with idle timeout (5min)
+- Auto-connect toggle — persistent `SharedPreferences`, connects on app start
+- Auto-permissions on resume — overlay, screen record, accessibility via Shizuku
+- Screen record START/STOP intents — non-blocking `startRecording()`/`stopRecording()`
+- Relay daemon as `systemd` service (`hermes-relay.service`)
+
+**Fixes:**
+- Input validation: empty command → 400, negative timeout → 400
+- `TerminalExecutor.catch(Exception)` instead of `IllegalArgumentException` only
+- Global exception handler via `Monitoring` intercept (no StatusPages dependency)
+- Double `resolveBackend()` crash in catch block
+- `/shell` route added to relay daemon ROUTES
+- Callback chaining in `RelayService` — preserves UI callbacks when service connects
+
+**Removed:**
+- Google Sign-In button from UI (backend `/auth/google` never implemented)
+
+**Commits:**
+```
+2588ee3 feat: unlock endpoint via Shizuku (wake + dismiss keyguard)
+e2140a2 fix: add /shell route to relay daemon ROUTES
+39cdcf3 feat: auto-permissions on startup, screen record START/STOP intents, non-blocking recorder
+2457a5a feat: on-demand relay with BroadcastReceiver, auto-connect toggle, and token-less pairing
+3763a3c refactor: remove Google Sign-In from UI (backend not implemented)
+f971ffe fix: double-resolveBackend crash in TerminalExecutor catch block
+5d72b2a fix: input validation, error handling, and global exception handler for Bridge API
+```
+
+### Original v0.4.0 (raulvidis)
+
+See original [README.md](https://github.com/raulvidis/hermes-android/blob/main/README.md) for the base release.
