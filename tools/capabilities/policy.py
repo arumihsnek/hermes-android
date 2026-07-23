@@ -118,9 +118,6 @@ class PolicyGate:
                         f"Action '{action}' not in authorization scope",
                     )
 
-                # Mark nonce as used
-                self.used_nonces.add(authorization.nonce)
-
                 # Candidate tier: only ordinary reversible actions
                 if authorization.tier == ExecutionTier.CANDIDATE:
                     if classification != ActionClassification.ORDINARY_REVERSIBLE:
