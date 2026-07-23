@@ -153,6 +153,7 @@ class TestPolicyGate:
         assert exc_info.value.failure_class == FailureClass.AUTHORIZATION_EXPIRED
 
     def test_replay_rejected(self, gate, device):
+        """Replay protection is now handled by CapabilityService, not PolicyGate."""
         auth = create_authorization(
             tier=ExecutionTier.CANDIDATE,
             capability="timer",
@@ -162,11 +163,10 @@ class TestPolicyGate:
             allowed_actions=["open_app"],
             ttl_seconds=300,
         )
+        # Policy gate no longer tracks nonces — service does
         gate.check_action("open_app", authorization=auth)
-        # Second use of same nonce
-        with pytest.raises(AuthorizationRefused) as exc_info:
-            gate.check_action("open_app", authorization=auth)
-        assert exc_info.value.failure_class == FailureClass.AUTHORIZATION_REPLAY
+        # Same nonce is fine at the gate level (service tracks it)
+        gate.check_action("open_app", authorization=auth)
 
     def test_scope_mismatch_rejected(self, gate, device):
         auth = create_authorization(
