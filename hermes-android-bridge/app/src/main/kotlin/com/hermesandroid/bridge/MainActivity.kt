@@ -87,17 +87,17 @@ class MainActivity : Activity() {
         btnDisconnect = findViewById(R.id.btnDisconnect)
         tvAddress = findViewById(R.id.tvAddress)
         
-        // Google Sign-In views
-        googleSignInSection = findViewById(R.id.googleSignInSection)
-        tvUserEmail = findViewById(R.id.tvUserEmail)
-        btnGoogleSignIn = findViewById(R.id.btnGoogleSignIn)
-        btnLogout = findViewById(R.id.btnLogout)
-        tvAuthStatus = findViewById(R.id.tvAuthStatus)
+        // Google Sign-In removed — backend /auth/google not implemented
+        // googleSignInSection = findViewById(R.id.googleSignInSection)
+        // tvUserEmail = findViewById(R.id.tvUserEmail)
+        // btnGoogleSignIn = findViewById(R.id.btnGoogleSignIn)
+        // btnLogout = findViewById(R.id.btnLogout)
+        // tvAuthStatus = findViewById(R.id.tvAuthStatus)
 
         setupPairingCode()
         setupPermissions()
         setupRelayConnection()
-        setupGoogleSignIn()
+        // setupGoogleSignIn()
 
         updateConnectionInfo()
         updateStatus()
@@ -145,7 +145,7 @@ class MainActivity : Activity() {
             }
             updatePermissionSwitches()
         } else if (requestCode == REQUEST_CODE_GOOGLE_SIGN_IN) {
-            handleGoogleSignInResult(data)
+            // handleGoogleSignInResult(data) — Google Sign-In removed
         }
     }
 
