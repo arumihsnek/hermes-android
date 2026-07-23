@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.provider.Settings
 import android.util.Log
+import com.hermesandroid.bridge.media.ScreenRecorder
 
 /**
  * Handles intent-based commands for the Hermes Bridge relay.
@@ -26,6 +27,8 @@ class RelayIntentReceiver : BroadcastReceiver() {
         const val ACTION_STATUS = "com.hermesandroid.bridge.STATUS"
         const val ACTION_ENABLE_A11Y = "com.hermesandroid.bridge.ENABLE_A11Y"
         const val ACTION_ENABLE_SCREEN_RECORD = "com.hermesandroid.bridge.ENABLE_SCREEN_RECORD"
+        const val ACTION_START_SCREEN_RECORD = "com.hermesandroid.bridge.START_SCREEN_RECORD"
+        const val ACTION_STOP_SCREEN_RECORD = "com.hermesandroid.bridge.STOP_SCREEN_RECORD"
 
         const val EXTRA_SERVER = "server"
         const val EXTRA_TOKEN = "token"
@@ -45,6 +48,8 @@ class RelayIntentReceiver : BroadcastReceiver() {
                 ACTION_STATUS -> handleStatus(context)
                 ACTION_ENABLE_A11Y -> handleEnableA11y(context)
                 ACTION_ENABLE_SCREEN_RECORD -> handleEnableScreenRecord(context)
+                ACTION_START_SCREEN_RECORD -> handleStartScreenRecord()
+                ACTION_STOP_SCREEN_RECORD -> handleStopScreenRecord()
                 else -> Log.w(TAG, "Unknown action: $action")
             }
         } catch (e: Exception) {
@@ -86,5 +91,15 @@ class RelayIntentReceiver : BroadcastReceiver() {
     private fun handleEnableScreenRecord(context: Context) {
         // ScreenRecordHelper.requestPermission(context) — TBD
         Log.d(TAG, "Screen record permission request not yet implemented via intent")
+    }
+
+    private fun handleStartScreenRecord() {
+        val result = ScreenRecorder.startRecording()
+        Log.d(TAG, "Screen record start: $result")
+    }
+
+    private fun handleStopScreenRecord() {
+        val result = ScreenRecorder.stopRecording()
+        Log.d(TAG, "Screen record stop: success=${result["success"]}")
     }
 }
