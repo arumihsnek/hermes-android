@@ -45,63 +45,7 @@
         android:background="#ED7931"
         android:layout_marginBottom="16dp" />
 
-    <!-- Google Sign-In Section -->
-    <LinearLayout
-        android:id="@+id/googleSignInSection"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:background="@drawable/bg_card_rounded"
-        android:padding="16dp"
-        android:layout_marginBottom="16dp"
-        android:visibility="gone">
-
-        <TextView
-            android:id="@+id/tvUserEmail"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text=""
-            android:textSize="14sp"
-            android:textColor="#CCCCCC"
-            android:fontFamily="monospace"
-            android:layout_marginBottom="8dp"
-            android:visibility="gone" />
-
-        <Button
-            android:id="@+id/btnGoogleSignIn"
-            android:layout_width="match_parent"
-            android:layout_height="48dp"
-            android:text="@string/google_sign_in_button_text"
-            android:textSize="14sp"
-            android:textColor="#FFFFFF"
-            android:fontFamily="monospace"
-            android:background="@drawable/bg_button_orange"
-            android:textAllCaps="false"
-            android:layout_marginBottom="8dp" />
-
-        <Button
-            android:id="@+id/btnLogout"
-            android:layout_width="match_parent"
-            android:layout_height="48dp"
-            android:text="@string/logout_button_text"
-            android:textSize="14sp"
-            android:textColor="#FFFFFF"
-            android:fontFamily="monospace"
-            android:background="@drawable/bg_button_disconnect"
-            android:textAllCaps="false"
-            android:visibility="gone" />
-
-        <TextView
-            android:id="@+id/tvAuthStatus"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text=""
-            android:textSize="12sp"
-            android:textColor="#4CAF50"
-            android:fontFamily="monospace"
-            android:layout_marginTop="4dp"
-            android:visibility="gone" />
-    </LinearLayout>
+    <!-- Google Sign-In removed — backend /auth/google not implemented -->
 
     <LinearLayout
         android:layout_width="match_parent"
