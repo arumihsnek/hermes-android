@@ -1,18 +1,18 @@
 #!/usr/bin/env python3
-"""Generate Android launcher icons from Arcticons-style SVG icon."""
+"""Generate Android launcher icons from Arcticons-style SVG icon.
+
+Faithful to Arcticons: white 1px strokes on solid dark background.
+No accent borders, no extra colors — just the icon.
+"""
 import io
 import os
 from PIL import Image, ImageDraw
 
 import cairosvg
 
-# The SVG icon path
-svg_path = "/home/ubuntu/.hermes/webui/attachments/36d0de67ab51/hermes-bridge.arcticons.svg"
+SVG_PATH = "/home/ubuntu/.hermes/webui/attachments/36d0de67ab51/hermes-bridge.arcticons.svg"
+BASE = "/home/ubuntu/code/hermes-android/hermes-android-bridge/app/src/main/res"
 
-# Output directories
-base = "/home/ubuntu/code/hermes-android/hermes-android-bridge/app/src/main/res"
-
-# Android icon densities (size in pixels for the full icon area)
 DENSITIES = {
     "mipmap-mdpi": 48,
     "mipmap-hdpi": 72,
@@ -21,66 +21,55 @@ DENSITIES = {
     "mipmap-xxxhdpi": 192,
 }
 
-# App brand colors
-BG_COLOR = (30, 30, 50)  # dark indigo background
-ACCENT_COLOR = (100, 160, 255)  # light blue accent
+BG_COLOR = (27, 27, 40)  # near-black dark indigo (Arcticons style)
 
 def create_launcher_icon(size, round_icon=False):
-    """Create a launcher icon with the SVG on a colored background."""
-    # First render the SVG at the target size
-    svg_content = open(svg_path).read()
-    
-    # For mdpi base, the SVG is 48x48. We scale proportionally.
-    png_data = cairosvg.svg2png(bytestring=svg_content, output_width=size, output_height=size)
-    
-    # Load the white line art
-    icon_img = Image.open(io.BytesIO(png_data)).convert("RGBA")
-    
-    # Create the background: rounded square or circle
+    """Create clean Arcticons-style launcher icon."""
+    svg = open(SVG_PATH).read()
+
+    # Render SVG at full size — cairosvg handles 1px stroke correctly
+    png_data = cairosvg.svg2png(
+        bytestring=svg,
+        output_width=size,
+        output_height=size,
+    )
+    icon = Image.open(io.BytesIO(png_data)).convert("RGBA")
+
+    # Background: rounded square or circle, no border
     bg = Image.new("RGBA", (size, size), (0, 0, 0, 0))
     draw = ImageDraw.Draw(bg)
-    
-    # Inset for the background shape (90% of size)
-    margin = int(size * 0.05)
-    shape_bbox = [margin, margin, size - margin, size - margin]
-    
+
+    inset = int(size * 0.04)  # 4% margin
+    bbox = [inset, inset, size - inset, size - inset]
+
     if round_icon:
-        draw.ellipse(shape_bbox, fill=BG_COLOR)
-        # Add a thin stroke
-        draw.ellipse(shape_bbox, outline=ACCENT_COLOR, width=max(1, size // 48))
+        draw.ellipse(bbox, fill=BG_COLOR)
     else:
-        # Rounded square with corner radius ~20% of size
-        radius = int(size * 0.2)
-        draw.rounded_rectangle(shape_bbox, radius=radius, fill=BG_COLOR)
-        draw.rounded_rectangle(shape_bbox, radius=radius, outline=ACCENT_COLOR, width=max(1, size // 48))
-    
-    # Scale the SVG icon to fit inside the background (70% of size with padding)
-    icon_size = int(size * 0.55)
-    icon_resized = icon_img.resize((icon_size, icon_size), Image.LANCZOS)
-    
-    # Center the icon on the background
-    x_offset = (size - icon_size) // 2
-    y_offset = (size - icon_size) // 2
-    
-    # Composite: place white line art on colored background
+        radius = int(size * 0.22)
+        draw.rounded_rectangle(bbox, radius=radius, fill=BG_COLOR)
+
+    # Scale icon to fill background with slight padding
+    # The SVG is 48x48 with 1px strokes; at target size we scale
+    # so the icon fills ~82% of the background area
+    icon_target = int(size * 0.72)
+    icon_resized = icon.resize((icon_target, icon_target), Image.LANCZOS)
+
+    x_off = (size - icon_target) // 2
+    y_off = (size - icon_target) // 2
+
     result = bg.copy()
-    result.paste(icon_resized, (x_offset, y_offset), icon_resized)
-    
+    result.paste(icon_resized, (x_off, y_off), icon_resized)
     return result
 
-print("Generating launcher icons...")
 
+print("Generating Arcticons-style launcher icons...")
 for density, dim in DENSITIES.items():
     for suffix, round_flag in [("", False), ("_round", True)]:
         img = create_launcher_icon(dim, round_icon=round_flag)
-        
-        out_dir = os.path.join(base, density)
+        out_dir = os.path.join(BASE, density)
         os.makedirs(out_dir, exist_ok=True)
-        
         out_path = os.path.join(out_dir, f"ic_launcher{suffix}.png")
         img.save(out_path, "PNG")
-        
-        actual_size = os.path.getsize(out_path)
-        print(f"  {density}/ic_launcher{suffix}.png  {dim}x{dim}  {actual_size} bytes")
-
-print("Done! All icons generated.")
+        sz = os.path.getsize(out_path)
+        print(f"  {density}/ic_launcher{suffix}.png  {dim}x{dim}  {sz} bytes")
+print("Done!")
