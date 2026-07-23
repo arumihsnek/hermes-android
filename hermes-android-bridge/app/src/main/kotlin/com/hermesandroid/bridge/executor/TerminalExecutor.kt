@@ -54,7 +54,7 @@ object TerminalExecutor {
                 else -> runProcess(arrayOf("sh", "-c", command), timeoutMs, "app")
             }
         } catch (e: Exception) {
-            ShellResult("", "${e::class.simpleName}: ${e.message ?: "Unknown"}", -1, backend = resolveBackend(backend))
+            ShellResult("", "${e::class.simpleName}: ${e.message ?: "Unknown"}", -1, backend = backend)
         }
     }
 
