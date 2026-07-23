@@ -24,6 +24,16 @@ import java.util.concurrent.atomic.AtomicInteger
  *
  * Running through Termux gives access to its package ecosystem (pkg/apt: python, git,
  * ssh, nmap, ffmpeg, …) which the app's own sandbox does not have.
+ *
+ * ## Timeout handling
+ *
+ * Termux does not expose a direct `Process` handle, so timeout cancellation
+ * is done via a PID-capture wrapper:
+ *
+ *  1. The user command is wrapped in a shell snippet that captures the PID.
+ *  2. The PID is stored to a known file keyed by a unique execution token.
+ *  3. If the wait times out, a **second** `RUN_COMMAND` intent is sent which
+ *     kills the stored PID and removes the marker file.
  */
 object TermuxExecutor {
 
@@ -50,9 +60,18 @@ object TermuxExecutor {
 
     private const val BASH = "/data/data/com.termux/files/usr/bin/bash"
     private const val HOME = "/data/data/com.termux/files/home"
+    private const val PID_DIR = "/data/data/com.termux/files/home/.termux_pids"
+
+    /** Grace period after timeout for kill to take effect (ms). */
+    private const val KILL_GRACE_MS = 2_000L
+
+    /** Delay before issuing the kill-on-timeout cleanup (ms). */
+    private const val KILL_SETTLE_MS = 500L
+
+    /** Maximum bytes of stdout/stderr retained from Termux. */
+    private const val TERMUX_OUTPUT_LIMIT = 1_048_576
 
     private val requestCounter = AtomicInteger(1000)
-
     private lateinit var appContext: Context
 
     fun init(context: Context) {
@@ -79,9 +98,29 @@ object TermuxExecutor {
         }
 
         val requestCode = requestCounter.incrementAndGet()
+        val token = "hmx_${requestCode}_${System.nanoTime()}"
+        val pidFile = "$PID_DIR/pid_$token"
         val resultAction = "com.hermesandroid.bridge.TERMUX_RESULT.$requestCode"
         val latch = CountDownLatch(1)
         var result = TermuxResult("", "No response from Termux.", -1, true, "no_response")
+
+        // Wrap the command so its PID is captured and its process group can be killed.
+        // Structure:
+        //   1. Ensure PID dir exists.
+        //   2. Launch the command via setsid (creates a new process group).
+        //   3. Store the PID (also PGID) so the whole group can be killed on timeout.
+        //   4. When the command finishes, remove the PID file.
+        val escapedCommand = command
+            .replace("'", "'\\''")
+        val wrappedCommand =
+            "mkdir -p $PID_DIR; " +
+            "setsid bash -c '" + escapedCommand + "' & " +
+            "CMD_PID=\$!; " +
+            "echo \$CMD_PID > $pidFile; " +
+            "wait \$CMD_PID; " +
+            "EXIT=\$?; " +
+            "rm -f $pidFile; " +
+            "exit \$EXIT"
 
         val receiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context?, intent: Intent?) {
@@ -103,7 +142,7 @@ object TermuxExecutor {
             val intent = Intent(ACTION_RUN_COMMAND).apply {
                 component = ComponentName(TERMUX_PACKAGE, RUN_COMMAND_SERVICE)
                 putExtra(EXTRA_PATH, BASH)
-                putExtra(EXTRA_ARGUMENTS, arrayOf("-c", command))
+                putExtra(EXTRA_ARGUMENTS, arrayOf("-c", wrappedCommand))
                 putExtra(EXTRA_WORKDIR, workdir)
                 putExtra(EXTRA_BACKGROUND, true)
                 putExtra(EXTRA_SESSION_ACTION, "0")
@@ -116,8 +155,38 @@ object TermuxExecutor {
                 appContext.startService(intent)
             }
 
-            val completed = latch.await(timeoutMs + 2000, TimeUnit.MILLISECONDS)
+            val completed = latch.await(timeoutMs, TimeUnit.MILLISECONDS)
             if (!completed) {
+                // Timed out — give Termux a brief moment to write the PID file,
+                // then kill the process group and wait a bit more for late results.
+                runCatching {
+                    Thread.sleep(KILL_SETTLE_MS)
+                    val killIntent = Intent(ACTION_RUN_COMMAND).apply {
+                        component = ComponentName(TERMUX_PACKAGE, RUN_COMMAND_SERVICE)
+                        putExtra(EXTRA_PATH, BASH)
+                        putExtra(EXTRA_ARGUMENTS, arrayOf(
+                            "-c",
+                            "if [ -f $pidFile ]; then " +
+                            "PID=\$(cat $pidFile); " +
+                            "kill -TERM -- -\"\$PID\" 2>/dev/null; " +
+                            "kill -TERM \"\$PID\" 2>/dev/null; " +
+                            "rm -f $pidFile; fi"
+                        ))
+                        putExtra(EXTRA_WORKDIR, workdir)
+                        putExtra(EXTRA_BACKGROUND, true)
+                        putExtra(EXTRA_SESSION_ACTION, "0")
+                    }
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        appContext.startForegroundService(killIntent)
+                    } else {
+                        appContext.startService(killIntent)
+                    }
+                    // Wait briefly for any late result after the kill
+                    if (latch.await(KILL_GRACE_MS, TimeUnit.MILLISECONDS)) {
+                        // The result was received after kill — use it
+                        return@runCatching
+                    }
+                }
                 result = TermuxResult("", "Termux command timed out after ${timeoutMs}ms.", -1, true, "timeout")
             }
         } catch (e: Exception) {
@@ -135,8 +204,18 @@ object TermuxExecutor {
             return TermuxResult("", "Empty result from Termux. Is 'allow-external-apps=true' set?", -1, false,
                 "empty_result")
         }
-        val stdout = bundle.getString(RESULT_STDOUT, "") ?: ""
-        val stderr = bundle.getString(RESULT_STDERR, "") ?: ""
+        val rawStdout = bundle.getString(RESULT_STDOUT, "") ?: ""
+        val rawStderr = bundle.getString(RESULT_STDERR, "") ?: ""
+        val stdout = if (rawStdout.length <= TERMUX_OUTPUT_LIMIT) {
+            rawStdout
+        } else {
+            rawStdout.take(TERMUX_OUTPUT_LIMIT) + "\n[truncated ${rawStdout.length - TERMUX_OUTPUT_LIMIT} bytes]"
+        }
+        val stderr = if (rawStderr.length <= TERMUX_OUTPUT_LIMIT) {
+            rawStderr
+        } else {
+            rawStderr.take(TERMUX_OUTPUT_LIMIT) + "\n[truncated ${rawStderr.length - TERMUX_OUTPUT_LIMIT} bytes]"
+        }
         val exitCode = bundle.getInt(RESULT_EXIT_CODE, -1)
         val err = bundle.getInt(RESULT_ERR, 0)
         val errmsg = bundle.getString(RESULT_ERRMSG, "") ?: ""

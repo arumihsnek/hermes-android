@@ -2,6 +2,7 @@ package com.hermesandroid.bridge.executor
 
 import android.content.Context
 import com.hermesandroid.bridge.shizuku.ShizukuExecutor
+import com.hermesandroid.bridge.util.BoundedReader
 import org.json.JSONObject
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
@@ -17,12 +18,20 @@ import java.util.concurrent.TimeUnit
  */
 object TerminalExecutor {
 
+    /** Maximum bytes retained per stdout/stderr stream (1 MiB). */
+    const val MAX_OUTPUT_BYTES: Int = 1_048_576
+
+    /** Maximum command length (4 KiB). */
+    const val MAX_COMMAND_LENGTH: Int = 4096
+
     data class ShellResult(
         val stdout: String,
         val stderr: String,
         val exitCode: Int,
         val timedOut: Boolean = false,
-        val backend: String = "app"
+        val backend: String = "app",
+        val stdoutTruncated: Boolean = false,
+        val stderrTruncated: Boolean = false
     )
 
     fun init(context: Context) {
@@ -31,11 +40,21 @@ object TerminalExecutor {
     }
 
     fun exec(command: String, timeoutMs: Long = 10_000, backend: String = "auto"): ShellResult {
-        return when (resolveBackend(backend)) {
-            "shizuku" -> runShizuku(command, timeoutMs)
-            "termux" -> runTermux(command, timeoutMs)
-            "root" -> runProcess(arrayOf("su", "-c", command), timeoutMs, "root")
-            else -> runProcess(arrayOf("sh", "-c", command), timeoutMs, "app")
+        if (command.length > MAX_COMMAND_LENGTH) {
+            return ShellResult(
+                "", "Command too long: ${command.length} chars (max $MAX_COMMAND_LENGTH)",
+                -1, backend = resolveBackend(backend)
+            )
+        }
+        return try {
+            when (resolveBackend(backend)) {
+                "shizuku" -> runShizuku(command, timeoutMs)
+                "termux" -> runTermux(command, timeoutMs)
+                "root" -> runProcess(arrayOf("su", "-c", command), timeoutMs, "root")
+                else -> runProcess(arrayOf("sh", "-c", command), timeoutMs, "app")
+            }
+        } catch (e: IllegalArgumentException) {
+            ShellResult("", e.message ?: "Invalid backend", -1, backend = backend)
         }
     }
 
@@ -56,9 +75,14 @@ object TerminalExecutor {
         "default" to resolveBackend("auto")
     )
 
-    private fun resolveBackend(requested: String): String = when (requested.lowercase()) {
-        "auto", "" -> if (ShizukuExecutor.isAvailable()) "shizuku" else "app"
-        else -> requested.lowercase()
+    private fun resolveBackend(requested: String): String {
+        val known = setOf("auto", "app", "shizuku", "termux", "root")
+        val lower = requested.lowercase()
+        if (lower == "" || lower == "auto") {
+            return if (ShizukuExecutor.isAvailable()) "shizuku" else "app"
+        }
+        require(lower in known) { "Unknown backend: $requested. Known: ${known.joinToString()}" }
+        return lower
     }
 
     private fun runShizuku(command: String, timeoutMs: Long): ShellResult {
@@ -84,27 +108,50 @@ object TerminalExecutor {
 
     private fun runProcess(cmd: Array<String>, timeoutMs: Long, backend: String): ShellResult {
         return try {
-            val process = ProcessBuilder(*cmd)
-                .redirectErrorStream(false)
-                .start()
-
-            val pool = Executors.newFixedThreadPool(2)
-            val outF = pool.submit<String> { process.inputStream.bufferedReader().readText() }
-            val errF = pool.submit<String> { process.errorStream.bufferedReader().readText() }
-
-            val finished = process.waitFor(timeoutMs, TimeUnit.MILLISECONDS)
-            if (!finished) {
-                process.destroyForcibly()
-                val out = runCatching { outF.get(500, TimeUnit.MILLISECONDS) }.getOrDefault("")
-                val err = runCatching { errF.get(500, TimeUnit.MILLISECONDS) }.getOrDefault("")
-                pool.shutdownNow()
-                return ShellResult(out, err, -1, timedOut = true, backend = backend)
+            val process = try {
+                ProcessBuilder(*cmd)
+                    .redirectErrorStream(false)
+                    .start()
+            } catch (e: Exception) {
+                return ShellResult("", "Process creation failed: ${e.message}", -1, backend = backend)
             }
 
-            val out = runCatching { outF.get(2, TimeUnit.SECONDS) }.getOrDefault("")
-            val err = runCatching { errF.get(2, TimeUnit.SECONDS) }.getOrDefault("")
-            pool.shutdownNow()
-            ShellResult(out, err, process.exitValue(), backend = backend)
+            val pool = Executors.newFixedThreadPool(2)
+            try {
+                val outF = pool.submit<BoundedReader.Result> {
+                    BoundedReader.read(process.inputStream, MAX_OUTPUT_BYTES)
+                }
+                val errF = pool.submit<BoundedReader.Result> {
+                    BoundedReader.read(process.errorStream, MAX_OUTPUT_BYTES)
+                }
+
+                val finished = process.waitFor(timeoutMs, TimeUnit.MILLISECONDS)
+                if (!finished) {
+                    process.destroyForcibly()
+                    process.waitFor(1, TimeUnit.SECONDS)
+                }
+
+                val outResult = runCatching { outF.get(2, TimeUnit.SECONDS) }
+                    .getOrDefault(BoundedReader.Result("", false))
+                val errResult = runCatching { errF.get(2, TimeUnit.SECONDS) }
+                    .getOrDefault(BoundedReader.Result("", false))
+
+                ShellResult(
+                    stdout = outResult.text,
+                    stderr = errResult.text,
+                    exitCode = if (finished) process.exitValue() else -1,
+                    timedOut = !finished,
+                    backend = backend,
+                    stdoutTruncated = outResult.truncated,
+                    stderrTruncated = errResult.truncated
+                )
+            } finally {
+                pool.shutdownNow()
+                if (process.isAlive()) {
+                    process.destroyForcibly()
+                    process.waitFor(1, TimeUnit.SECONDS)
+                }
+            }
         } catch (e: Exception) {
             ShellResult("", e.message ?: "Unknown error", -1, backend = backend)
         }
