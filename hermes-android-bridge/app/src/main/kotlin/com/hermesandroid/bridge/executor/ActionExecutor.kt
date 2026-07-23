@@ -26,6 +26,9 @@ import java.io.ByteArrayOutputStream
 import java.util.concurrent.Executor
 import kotlin.coroutines.resume
 
+/** Intent flag for API 34+ implicit broadcast export. */
+private const val FLAG_RECEIVER_EXPORTED = 0x01000000
+
 object ActionExecutor {
 
     suspend fun tap(x: Int? = null, y: Int? = null, nodeId: String? = null): ActionResult =
@@ -661,7 +664,7 @@ object ActionExecutor {
             }
             // Android 14+ requires FLAG_RECEIVER_EXPORTED for implicit broadcasts
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                intent.addFlags(Intent.FLAG_RECEIVER_EXPORTED)
+                intent.addFlags(FLAG_RECEIVER_EXPORTED)
             }
             service.sendBroadcast(intent)
             ActionResult(true, "Broadcast sent: $action")

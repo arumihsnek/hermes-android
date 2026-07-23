@@ -69,4 +69,5 @@ dependencies {
     testImplementation(libs.mockk)
     testImplementation(libs.robolectric)
     testImplementation(libs.mockwebserver)
+    implementation("androidx.security:security-crypto:1.1.0-alpha06")
 }

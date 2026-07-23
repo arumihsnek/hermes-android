@@ -7,6 +7,7 @@ import com.google.gson.Gson
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import com.hermesandroid.bridge.executor.ActionExecutor
+import com.hermesandroid.bridge.executor.TerminalExecutor
 import com.hermesandroid.bridge.media.ScreenRecorder
 import com.hermesandroid.bridge.model.ScreenNode
 import com.hermesandroid.bridge.executor.ScreenReader
@@ -557,7 +558,8 @@ object RelayClient {
                     "stderr" to result.stderr,
                     "exitCode" to result.exitCode,
                     "timedOut" to result.timedOut,
-                    "backend" to result.backend,
+                    "stdoutTruncated" to result.stdoutTruncated,
+                    "stderrTruncated" to result.stderrTruncated,
                     "success" to (result.exitCode == 0)
                 ) to 200
             }
