@@ -22,6 +22,7 @@ import com.hermesandroid.bridge.client.RelayClient
 import com.hermesandroid.bridge.media.ScreenRecorder
 import com.hermesandroid.bridge.overlay.StatusOverlay
 import com.hermesandroid.bridge.service.BridgeAccessibilityService
+import com.hermesandroid.bridge.service.RelayService
 import com.hermesandroid.bridge.shizuku.ShizukuExecutor
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.launch
@@ -49,6 +50,7 @@ class MainActivity : Activity() {
     private lateinit var switchAccessibility: Switch
     private lateinit var switchOverlay: Switch
     private lateinit var switchScreenRecord: Switch
+    private lateinit var switchAutoConnectRelay: Switch
     private lateinit var tvPairingCode: TextView
     private lateinit var btnRegenerate: Button
     private lateinit var etServerUrl: EditText
@@ -79,6 +81,7 @@ class MainActivity : Activity() {
         switchAccessibility = findViewById(R.id.switchAccessibility)
         switchOverlay = findViewById(R.id.switchOverlay)
         switchScreenRecord = findViewById(R.id.switchScreenRecord)
+        switchAutoConnectRelay = findViewById(R.id.switchAutoConnectRelay)
         tvPairingCode = findViewById(R.id.tvPairingCode)
         btnRegenerate = findViewById(R.id.btnRegenerate)
         etServerUrl = findViewById(R.id.etServerUrl)
@@ -215,11 +218,30 @@ class MainActivity : Activity() {
     }
 
     private fun setupRelayConnection() {
+        val prefs = getSharedPreferences("hermes_bridge_prefs", MODE_PRIVATE)
+        val autoConnect = prefs.getBoolean("auto_connect_relay", false)
         val savedUrl = RelayClient.serverUrl
+        
+        // Initialize auto-connect switch
+        switchAutoConnectRelay.isChecked = autoConnect
+        switchAutoConnectRelay.setOnCheckedChangeListener { _, isChecked ->
+            prefs.edit().putBoolean("auto_connect_relay", isChecked).apply()
+        }
+        
+        // Auto-fill server URL if saved
         if (!savedUrl.isNullOrBlank()) {
             etServerUrl.setText(savedUrl)
+        } else {
+            // Default to relay on Eddy
+            etServerUrl.setText("82.70.86.174:18766")
         }
-
+        
+        // Auto-connect if preference enabled
+        if (autoConnect && savedUrl.isNullOrBlank().not() && !RelayClient.isConnected) {
+            val code = PairingManager.getCode()
+            RelayService.start(this, savedUrl ?: "82.70.86.174:18766", code)
+        }
+        
         RelayClient.onStatusChanged = { connected, message ->
             tvRelayStatus.text = message
             tvRelayStatus.setTextColor(
@@ -244,16 +266,14 @@ class MainActivity : Activity() {
                 return@setOnClickListener
             }
             val code = PairingManager.getCode()
-            RelayClient.connect(url, code)
+            // Save URL for auto-connect
+            RelayClient.serverUrl = url
+            RelayService.start(this, url, code)
         }
 
         btnDisconnect.setOnClickListener {
-            RelayClient.disconnect()
-            btnDisconnect.visibility = View.GONE
-            btnConnect.text = "CONNECT"
-            btnConnect.background = getDrawable(R.drawable.bg_button_orange)
-            btnConnect.setTextColor(0xFF1A1A1A.toInt())
-            updateStatus()
+            RelayService.stop(this)
+            updateRelayButton()
         }
 
         updateRelayButton()
@@ -277,7 +297,11 @@ class MainActivity : Activity() {
 
     private fun updateConnectionInfo() {
         val ip = getLocalIpAddress()
-        tvAddress.text = "http://$ip:8765 (USB/LAN)"
+        if (BuildConfig.DEBUG) {
+            tvAddress.text = "http://$ip:8765 (debug)"
+        } else {
+            tvAddress.text = "relay: ${RelayClient.serverUrl ?: "not connected"}"
+        }
     }
 
     private fun updateStatus() {

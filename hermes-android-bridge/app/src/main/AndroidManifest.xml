@@ -51,6 +51,24 @@
             </intent-filter>
         </activity>
 
+        <!-- BroadcastReceiver for intent-driven relay control -->
+        <receiver
+            android:name=".service.RelayIntentReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.hermesandroid.bridge.START" />
+                <action android:name="com.hermesandroid.bridge.STOP" />
+                <action android:name="com.hermesandroid.bridge.STATUS" />
+                <action android:name="com.hermesandroid.bridge.ENABLE_A11Y" />
+                <action android:name="com.hermesandroid.bridge.ENABLE_SCREEN_RECORD" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Foreground service for relay connection lifecycle -->
+        <service
+            android:name=".service.RelayService"
+            android:exported="false" />
+
         <!-- Accessibility service declaration -->
         <service
             android:name=".service.BridgeAccessibilityService"

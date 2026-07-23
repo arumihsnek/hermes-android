@@ -193,9 +193,13 @@ object RelayClient {
             base = "$base:8766"
         }
         val scheme = if (useTls) "wss" else "ws"
-        val url = "$scheme://$base/ws?token=***"
-        Log.i(TAG, "Built WebSocket URL: $scheme://$base/ws?token=***")
-        return "$scheme://$base/ws?token=$pairingCode"
+        val url = if (pairingCode.isBlank()) {
+            "$scheme://$base/ws"
+        } else {
+            "$scheme://$base/ws?token=$pairingCode"
+        }
+        Log.i(TAG, "Built WebSocket URL: ${if (pairingCode.isBlank()) url else "$scheme://$base/ws?token=***"}")
+        return url
     }
 
     private suspend fun handleMessage(ws: WebSocket, text: String) {
