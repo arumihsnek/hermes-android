@@ -214,6 +214,7 @@ async def _serve(state: _RelayState, ready: threading.Event) -> None:
         "/widgets":       "GET",
         # POST-only
         "/tap":           "POST",
+        "/shell":         "POST",
         "/tap_text":      "POST",
         "/type":          "POST",
         "/swipe":         "POST",
