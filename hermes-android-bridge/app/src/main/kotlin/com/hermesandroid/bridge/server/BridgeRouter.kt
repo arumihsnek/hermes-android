@@ -313,6 +313,14 @@ fun Application.configureRouting() {
             call.respond(result)
         }
 
+        post("/unlock") {
+            val result = ActionExecutor.wakeAndUnlock()
+            call.respond(mapOf(
+                "success" to result.success,
+                "message" to result.message
+            ))
+        }
+
         post("/screen_record") {
             data class RecordRequest(val durationMs: Long = 5000)
             val req = call.receive<RecordRequest>()

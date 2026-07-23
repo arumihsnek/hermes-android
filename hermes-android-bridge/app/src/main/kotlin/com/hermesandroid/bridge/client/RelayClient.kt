@@ -568,6 +568,14 @@ object RelayClient {
                 ) to 200
             }
 
+            method == "POST" && path == "/unlock" -> {
+                val result = ActionExecutor.wakeAndUnlock()
+                mapOf(
+                    "success" to result.success,
+                    "message" to result.message
+                ) to (if (result.success) 200 else 500)
+            }
+
             else -> {
                 mapOf("error" to "Unknown command: $method $path") to 404
             }
