@@ -5,17 +5,21 @@ import android.content.Context
 import android.content.ServiceConnection
 import android.content.pm.PackageManager
 import android.os.IBinder
+import android.os.RemoteException
 import android.util.Log
 import com.hermesandroid.bridge.BuildConfig
 import rikka.shizuku.Shizuku
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicReference
 
 /**
  * Bridges shell execution to a Shizuku-managed process running with `shell` (UID 2000)
  * privileges — the same level `adb shell` has, without root.
  *
  * Lifecycle: the user service is bound lazily on first use and kept alive (daemon) for reuse.
+ * If the binder dies, a death recipient clears the cached service, and the next call
+ * triggers a fresh bind.
  */
 object ShizukuExecutor {
 
@@ -23,32 +27,59 @@ object ShizukuExecutor {
     const val PERMISSION_REQUEST_CODE = 4242
 
     private const val SHIZUKU_PACKAGE = "moe.shizuku.privileged.api"
-    private const val SUI_PACKAGE = "com.android.shell" // Sui rides inside shell; pingBinder is the real test
+
+    private enum class BindingState { UNBOUND, BINDING, BOUND }
 
     @Volatile private var userService: IUserService? = null
-    @Volatile private var binding = false
+    @Volatile private var bindingState = BindingState.UNBOUND
+    @Volatile private var shuttingDown = false
+
     private var bindLatch: CountDownLatch? = null
 
     private lateinit var appContext: Context
 
     fun init(context: Context) {
         appContext = context.applicationContext
+        // Register death recipient to detect service crashes.
+        Shizuku.addBinderDeadListener {
+            Log.w(TAG, "Shizuku binder died — resetting service")
+            userService = null
+            bindingState = BindingState.UNBOUND
+        }
+    }
+
+    fun shutdown() {
+        shuttingDown = true
+        userService?.let {
+            try { it.destroy() } catch (_: RemoteException) { }
+        }
+        userService = null
+        bindingState = BindingState.UNBOUND
     }
 
     private val connection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
-            userService = if (binder != null && binder.pingBinder()) {
-                IUserService.Stub.asInterface(binder)
-            } else null
-            binding = false
+            if (binder != null && binder.pingBinder()) {
+                userService = IUserService.Stub.asInterface(binder)
+                bindingState = BindingState.BOUND
+            } else {
+                userService = null
+                bindingState = BindingState.UNBOUND
+            }
             bindLatch?.countDown()
             Log.i(TAG, "UserService connected: ${userService != null}")
         }
 
         override fun onServiceDisconnected(name: ComponentName?) {
             userService = null
-            binding = false
+            bindingState = BindingState.UNBOUND
             Log.i(TAG, "UserService disconnected")
+        }
+
+        override fun onBindingDied(name: ComponentName?) {
+            userService = null
+            bindingState = BindingState.UNBOUND
+            Log.w(TAG, "UserService binding died")
         }
     }
 
@@ -71,7 +102,6 @@ object ShizukuExecutor {
 
     fun hasPermission(): Boolean {
         if (!isRunning()) return false
-        // checkSelfPermission throws on pre-v11 Shizuku; runCatching makes that a safe "false".
         return runCatching {
             Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED
         }.getOrDefault(false)
@@ -81,7 +111,7 @@ object ShizukuExecutor {
         Shizuku.shouldShowRequestPermissionRationale()
     }.getOrDefault(false)
 
-    /** Trigger Shizuku's permission dialog. Result arrives via the listener registered in [init]/Application. */
+    /** Trigger Shizuku's permission dialog. */
     fun requestPermission() {
         if (isRunning()) {
             runCatching { Shizuku.requestPermission(PERMISSION_REQUEST_CODE) }
@@ -93,8 +123,14 @@ object ShizukuExecutor {
     /**
      * Run `sh -c command` with shell privileges. Returns the raw JSON produced by
      * [ShizukuUserService.exec], or a JSON error object if Shizuku is unavailable.
+     *
+     * Thread-safe: concurrent calls are serialized on binding state and each
+     * uses its own AIDL transaction.
      */
     fun exec(command: String, timeoutMs: Long): String {
+        if (shuttingDown) {
+            return errorJson("ShizukuExecutor is shut down.")
+        }
         if (!isRunning()) {
             return errorJson("Shizuku service is not running. Install/start Shizuku and pair it via ADB.")
         }
@@ -108,27 +144,48 @@ object ShizukuExecutor {
 
         return try {
             svc.exec(command, timeoutMs)
-        } catch (e: Exception) {
-            // Binder may have died — drop the cache so the next call rebinds.
+        } catch (e: RemoteException) {
+            // Binder died — clear cache for next call.
             userService = null
+            bindingState = BindingState.UNBOUND
+            errorJson("Shizuku exec failed (binder died): ${e.message}")
+        } catch (e: Exception) {
+            userService = null
+            bindingState = BindingState.UNBOUND
             errorJson("Shizuku exec failed: ${e.message}")
         }
     }
 
+    /**
+     * Ensures the Shizuku user service is bound.
+     * Serializes concurrent bind attempts: the first caller binds,
+     * subsequent callers wait for the latch.
+     */
     @Synchronized
     private fun ensureBound(): IUserService? {
-        userService?.let { return it }
-        if (binding) {
-            bindLatch?.await(8, TimeUnit.SECONDS)
+        // Fast path — already bound.
+        userService?.let {
+            if (runCatching { it.asBinder().pingBinder() }.getOrDefault(false)) {
+                return it
+            }
+            // Stale reference — clear and rebind.
+            userService = null
+            bindingState = BindingState.UNBOUND
+        }
+
+        if (bindingState == BindingState.BINDING && bindLatch != null) {
+            // Another thread is binding — wait for it.
+            bindLatch!!.await(8, TimeUnit.SECONDS)
             return userService
         }
-        binding = true
+
+        bindingState = BindingState.BINDING
         val latch = CountDownLatch(1)
         bindLatch = latch
         try {
             Shizuku.bindUserService(userServiceArgs, connection)
         } catch (e: Exception) {
-            binding = false
+            bindingState = BindingState.UNBOUND
             Log.e(TAG, "bindUserService failed", e)
             return null
         }

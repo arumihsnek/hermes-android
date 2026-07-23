@@ -347,6 +347,15 @@ fun Application.configureRouting() {
                 val backend: String = "auto"
             )
             val req = call.receive<ShellRequest>()
+            if (req.command.length > TerminalExecutor.MAX_COMMAND_LENGTH) {
+                call.respond(mapOf(
+                    "success" to false,
+                    "error" to "Command too long: ${req.command.length} chars (max ${TerminalExecutor.MAX_COMMAND_LENGTH})",
+                    "exitCode" to -1,
+                    "backend" to req.backend
+                ))
+                return@post
+            }
             val result = withContext(Dispatchers.IO) {
                 TerminalExecutor.exec(req.command, req.timeoutMs, req.backend)
             }
@@ -356,6 +365,8 @@ fun Application.configureRouting() {
                 "exitCode" to result.exitCode,
                 "timedOut" to result.timedOut,
                 "backend" to result.backend,
+                "stdoutTruncated" to result.stdoutTruncated,
+                "stderrTruncated" to result.stderrTruncated,
                 "success" to (result.exitCode == 0)
             ))
         }
