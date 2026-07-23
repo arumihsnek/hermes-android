@@ -237,6 +237,7 @@ async def _serve(state: _RelayState, ready: threading.Event) -> None:
         "/stop_speaking": "POST",
         "/screen_record": "POST",
         "/events/stream": "POST",
+        "/unlock":        "POST",
         # READ + WRITE
         "/clipboard":     "BOTH",
     }

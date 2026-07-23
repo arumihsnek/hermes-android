@@ -18,6 +18,7 @@ import android.view.accessibility.AccessibilityNodeInfo
 import com.hermesandroid.bridge.model.ActionResult
 import com.hermesandroid.bridge.model.ScreenNode
 import com.hermesandroid.bridge.model.computeHash
+import com.hermesandroid.bridge.shizuku.ShizukuExecutor
 import com.hermesandroid.bridge.power.WakeLockManager
 import com.hermesandroid.bridge.service.BridgeAccessibilityService
 import kotlinx.coroutines.delay
@@ -203,6 +204,27 @@ object ActionExecutor {
         }
         val result = service.performGlobalAction(action)
         return ActionResult(result, if (result) "Pressed $key" else "Key press failed")
+    }
+
+    /**
+     * Wake the screen and dismiss the keyguard via Shizuku shell.
+     * Works without accessibility service or screen unlock.
+     */
+    fun wakeAndUnlock(): ActionResult {
+        try {
+            // 1. Wake screen if asleep
+            ShizukuExecutor.exec("input keyevent KEYCODE_WAKEUP", 2000)
+            Thread.sleep(500)
+            // 2. Dismiss keyguard (lock screen)
+            val result = ShizukuExecutor.exec("wm dismiss-keyguard", 5000)
+            Thread.sleep(1000)
+            // 3. Verify — check if keyguard is gone
+            val check = ShizukuExecutor.exec("dumpsys window | grep mShowingDream", 2000)
+            val unlocked = check.contains("false") || !check.contains("mShowingDream=true")
+            return ActionResult(unlocked, if (unlocked) "Screen woken and unlocked" else "Unlock may have failed: $result")
+        } catch (e: Exception) {
+            return ActionResult(false, "Unlock failed: ${e.message}")
+        }
     }
 
     suspend fun waitForElement(
