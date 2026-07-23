@@ -344,31 +344,64 @@ fun Application.configureRouting() {
             data class ShellRequest(
                 val command: String,
                 val timeoutMs: Long = 10_000,
-                val backend: String = "auto"
+                val backend: String? = null
             )
-            val req = call.receive<ShellRequest>()
-            if (req.command.length > TerminalExecutor.MAX_COMMAND_LENGTH) {
+            try {
+                val req = call.receive<ShellRequest>()
+                val safeBackend = req.backend ?: "auto"
+
+                // Validate: non-empty command
+                if (req.command.isBlank()) {
+                    call.respond(HttpStatusCode.BadRequest, mapOf(
+                        "success" to false,
+                        "error" to "Command cannot be empty",
+                        "exitCode" to -1, "backend" to safeBackend
+                    ))
+                    return@post
+                }
+
+                // Validate: positive timeout
+                if (req.timeoutMs < 1) {
+                    call.respond(HttpStatusCode.BadRequest, mapOf(
+                        "success" to false,
+                        "error" to "timeoutMs must be >= 1, got ${req.timeoutMs}",
+                        "exitCode" to -1, "backend" to safeBackend
+                    ))
+                    return@post
+                }
+
+                // Validate: command length
+                if (req.command.length > TerminalExecutor.MAX_COMMAND_LENGTH) {
+                    call.respond(mapOf(
+                        "success" to false,
+                        "error" to "Command too long: ${req.command.length} chars (max ${TerminalExecutor.MAX_COMMAND_LENGTH})",
+                        "exitCode" to -1, "backend" to safeBackend
+                    ))
+                    return@post
+                }
+
+                val result = withContext(Dispatchers.IO) {
+                    TerminalExecutor.exec(req.command, req.timeoutMs, safeBackend)
+                }
                 call.respond(mapOf(
-                    "success" to false,
-                    "error" to "Command too long: ${req.command.length} chars (max ${TerminalExecutor.MAX_COMMAND_LENGTH})",
-                    "exitCode" to -1,
-                    "backend" to req.backend
+                    "stdout" to result.stdout,
+                    "stderr" to result.stderr,
+                    "exitCode" to result.exitCode,
+                    "timedOut" to result.timedOut,
+                    "backend" to result.backend,
+                    "stdoutTruncated" to result.stdoutTruncated,
+                    "stderrTruncated" to result.stderrTruncated,
+                    "success" to (result.exitCode == 0)
                 ))
-                return@post
+            } catch (e: Exception) {
+                val msg = e.message ?: "Unknown error"
+                val eCode = if (e is IllegalArgumentException) -2 else -1
+                call.respond(HttpStatusCode.InternalServerError, mapOf(
+                    "success" to false,
+                    "error" to msg,
+                    "exitCode" to eCode
+                ))
             }
-            val result = withContext(Dispatchers.IO) {
-                TerminalExecutor.exec(req.command, req.timeoutMs, req.backend)
-            }
-            call.respond(mapOf(
-                "stdout" to result.stdout,
-                "stderr" to result.stderr,
-                "exitCode" to result.exitCode,
-                "timedOut" to result.timedOut,
-                "backend" to result.backend,
-                "stdoutTruncated" to result.stdoutTruncated,
-                "stderrTruncated" to result.stderrTruncated,
-                "success" to (result.exitCode == 0)
-            ))
         }
 
         get("/shell/status") {

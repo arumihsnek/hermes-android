@@ -22,6 +22,24 @@ object BridgeServer {
                     serializeNulls()
                 }
             }
+            // Global exception handler — catch-all so no endpoint returns empty 500
+            intercept(ApplicationCallPipeline.Monitoring) {
+                try {
+                    proceed()
+                } catch (e: Exception) {
+                    val path = call.request.path()
+                    val msg = "${e::class.simpleName}: ${e.message}"
+                    try {
+                        call.respond(HttpStatusCode.InternalServerError, mapOf(
+                            "success" to false,
+                            "error" to msg,
+                            "path" to path
+                        ))
+                    } catch (_: Exception) {
+                        // response already sent
+                    }
+                }
+            }
             // Auth interceptor — every request must have valid Bearer token
             intercept(ApplicationCallPipeline.Plugins) {
                 val path = call.request.path()

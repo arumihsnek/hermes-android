@@ -53,8 +53,8 @@ object TerminalExecutor {
                 "root" -> runProcess(arrayOf("su", "-c", command), timeoutMs, "root")
                 else -> runProcess(arrayOf("sh", "-c", command), timeoutMs, "app")
             }
-        } catch (e: IllegalArgumentException) {
-            ShellResult("", e.message ?: "Invalid backend", -1, backend = backend)
+        } catch (e: Exception) {
+            ShellResult("", "${e::class.simpleName}: ${e.message ?: "Unknown"}", -1, backend = resolveBackend(backend))
         }
     }
 
