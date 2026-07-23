@@ -107,7 +107,7 @@ class ExecutionAuthorization:
     recipe_id: str
     recipe_revision: str
     device_fingerprint_digest: str
-    allowed_actions: list[str]
+    allowed_actions: tuple[str, ...]
     nonce: str
     issued_at: float
     expires_at: float
@@ -121,6 +121,8 @@ class ExecutionAuthorization:
         recipe_id: str,
         action: str,
         used_nonces: set[str],
+        capability: Optional[str] = None,
+        recipe_revision: Optional[str] = None,
     ) -> Optional[FailureClass]:
         """Validate authorization for a specific dispatch. Returns None on success."""
         if self.is_expired():
@@ -130,6 +132,10 @@ class ExecutionAuthorization:
         if device.digest() != self.device_fingerprint_digest:
             return FailureClass.AUTHORIZATION_FINGERPRINT_MISMATCH
         if recipe_id != self.recipe_id:
+            return FailureClass.AUTHORIZATION_RECIPE_MISMATCH
+        if capability is not None and capability != self.capability:
+            return FailureClass.AUTHORIZATION_SCOPE_MISMATCH
+        if recipe_revision is not None and recipe_revision != self.recipe_revision:
             return FailureClass.AUTHORIZATION_RECIPE_MISMATCH
         if action not in self.allowed_actions:
             return FailureClass.AUTHORIZATION_SCOPE_MISMATCH
@@ -142,7 +148,7 @@ def create_authorization(
     recipe_id: str,
     recipe_revision: str,
     device: DeviceFingerprint,
-    allowed_actions: list[str],
+    allowed_actions: tuple[str, ...],
     ttl_seconds: float = 300.0,
 ) -> ExecutionAuthorization:
     """Create a new authorization with generated nonce and timestamps."""
@@ -153,7 +159,7 @@ def create_authorization(
         recipe_id=recipe_id,
         recipe_revision=recipe_revision,
         device_fingerprint_digest=device.digest(),
-        allowed_actions=list(allowed_actions),
+        allowed_actions=tuple(allowed_actions),
         nonce=uuid.uuid4().hex[:16],
         issued_at=now,
         expires_at=now + ttl_seconds,
