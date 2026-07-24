@@ -972,27 +972,29 @@ def android_discover_capability(
 
 
 class _BridgeFlowHandler:
-    """FlowHandler that delegates to the bridge HTTP API."""
+    """FlowHandler that delegates to the bridge HTTP API.
+
+    Uses the canonical action contract for dispatch. Unknown actions
+    are rejected before making any HTTP call.
+    """
 
     def execute(self, action: str, params: dict) -> dict:
         """Execute a bridge action and return result dict."""
         try:
-            # Map action to bridge endpoint
-            endpoint_map = {
-                "android_tap": "/tap",
-                "android_tap_text": "/tap_text",
-                "android_type": "/type",
-                "android_swipe": "/swipe",
-                "android_open_app": "/open_app",
-                "android_press_key": "/press_key",
-                "android_scroll": "/scroll",
-                "android_send_intent": "/intent",
-                "android_broadcast": "/broadcast",
-            }
-            endpoint = endpoint_map.get(action)
-            if not endpoint:
+            from ..capabilities.action_contract import resolve_action, is_executable
+
+            # Resolve action through canonical catalog (handles aliases)
+            entry = resolve_action(action)
+            if entry is None:
                 return {"success": False, "error": f"Unknown action: {action}"}
 
+            if not is_executable(action):
+                return {"success": False,
+                        "error": f"Action '{action}' is semantic — must be resolved to executable actions before dispatch"}
+
+            endpoint = entry["bridge_endpoint"]
+
+            # Map action to bridge endpoint (canonical endpoint_map)
             data = _post(endpoint, params)
             return {"success": True, "data": data}
         except Exception as e:

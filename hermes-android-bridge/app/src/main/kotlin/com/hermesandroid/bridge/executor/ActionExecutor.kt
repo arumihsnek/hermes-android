@@ -102,6 +102,66 @@ object ActionExecutor {
         tap(cx, cy)
     }
 
+    suspend fun tapByResId(resId: String): ActionResult =
+        WakeLockManager.wakeForAction {
+        val service = BridgeAccessibilityService.instance
+            ?: return@wakeForAction ActionResult(false, "Accessibility service not running")
+        val rootNode = service.rootInActiveWindow
+            ?: return@wakeForAction ActionResult(false, "No active window")
+
+        // Search for node by resource ID in the accessibility tree
+        val node = findNodeByResId(rootNode, resId)
+        rootNode.recycle()
+
+        if (node == null) {
+            return@wakeForAction ActionResult(false, "Element with resId '$resId' not found")
+        }
+
+        if (node.isClickable) {
+            val result = node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+            node.recycle()
+            return@wakeForAction ActionResult(result, if (result) "Tapped resId '$resId'" else "Click failed on '$resId'")
+        }
+
+        // Try parent
+        var parent = node.parent
+        var clickableParent: AccessibilityNodeInfo? = null
+        while (parent != null) {
+            if (parent.isClickable) {
+                clickableParent = parent
+                break
+            }
+            val grandparent = parent.parent
+            parent.recycle()
+            parent = grandparent
+        }
+
+        if (clickableParent != null) {
+            val result = clickableParent.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+            clickableParent.recycle()
+            node.recycle()
+            return@wakeForAction ActionResult(result, if (result) "Tapped resId '$resId' (via parent)" else "Click failed on '$resId'")
+        }
+
+        val r = android.graphics.Rect()
+        node.getBoundsInScreen(r)
+        node.recycle()
+        val cx = (r.left + r.right) / 2
+        val cy = (r.top + r.bottom) / 2
+        tap(cx, cy)
+    }
+
+    private fun findNodeByResId(node: AccessibilityNodeInfo, resId: String): AccessibilityNodeInfo? {
+        if (node.viewIdResourceName == resId) return node
+        for (i in 0 until node.childCount) {
+            val child = node.getChild(i) ?: continue
+            val found = findNodeByResId(child, resId)
+            if (found != null) return found
+            child.recycle()
+        }
+        return null
+    }
+
     suspend fun typeText(text: String, clearFirst: Boolean = false): ActionResult =
         WakeLockManager.wakeForAction {
         val service = BridgeAccessibilityService.instance
