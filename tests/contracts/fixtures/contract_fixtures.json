@@ -1,0 +1,360 @@
+{
+  "_comment": "Contract fixtures for tools/ vs hermes-android-plugin/ behavioral parity",
+  "_generated": "2026-07-24",
+  "shared_routes": {
+    "/ping": "GET",
+    "/screen": "GET",
+    "/screenshot": "GET",
+    "/apps": "GET",
+    "/current_app": "GET",
+    "/notifications": "GET",
+    "/contacts": "GET",
+    "/events": "GET",
+    "/events/stream": "POST",
+    "/screen_hash": "GET",
+    "/location": "GET",
+    "/widgets": "GET",
+    "/clipboard": "BOTH",
+    "/tap": "POST",
+    "/tap_text": "POST",
+    "/type": "POST",
+    "/swipe": "POST",
+    "/open_app": "POST",
+    "/press_key": "POST",
+    "/scroll": "POST",
+    "/wait": "POST",
+    "/long_press": "POST",
+    "/drag": "POST",
+    "/describe_node": "POST",
+    "/find_nodes": "POST",
+    "/diff_screen": "POST",
+    "/pinch": "POST",
+    "/send_sms": "POST",
+    "/call": "POST",
+    "/media": "POST",
+    "/intent": "POST",
+    "/broadcast": "POST",
+    "/speak": "POST",
+    "/stop_speaking": "POST",
+    "/screen_record": "POST"
+  },
+  "tools_only_routes": {
+    "/shell": "POST",
+    "/unlock": "POST"
+  },
+  "tool_parity_fixtures": [
+    {
+      "name": "android_ping_success",
+      "function": "android_ping",
+      "module": "both",
+      "mock_response": {
+        "status_code": 200,
+        "json": {
+          "status": "ok",
+          "phone_connected": true
+        }
+      },
+      "expected_keys": [
+        "status",
+        "bridge"
+      ],
+      "expected_values": {
+        "status": "ok"
+      }
+    },
+    {
+      "name": "android_read_screen_basic",
+      "function": "android_read_screen",
+      "module": "both",
+      "args": {
+        "include_bounds": false
+      },
+      "mock_response": {
+        "status_code": 200,
+        "json": {
+          "nodes": [
+            {
+              "id": 1,
+              "text": "Hello"
+            }
+          ],
+          "root_id": 0
+        }
+      },
+      "expected_keys": [
+        "nodes",
+        "root_id"
+      ],
+      "expected_values": {}
+    },
+    {
+      "name": "android_tap_coordinates",
+      "function": "android_tap",
+      "module": "both",
+      "args": {
+        "x": 100,
+        "y": 200
+      },
+      "mock_response": {
+        "status_code": 200,
+        "json": {
+          "success": true
+        }
+      },
+      "expected_keys": [
+        "success"
+      ],
+      "expected_values": {
+        "success": true
+      }
+    },
+    {
+      "name": "android_tap_text_exact",
+      "function": "android_tap_text",
+      "module": "both",
+      "args": {
+        "text": "Continue",
+        "exact": true
+      },
+      "mock_response": {
+        "status_code": 200,
+        "json": {
+          "success": true,
+          "matched_text": "Continue"
+        }
+      },
+      "expected_keys": [
+        "success",
+        "matched_text"
+      ],
+      "expected_values": {}
+    },
+    {
+      "name": "android_type_text",
+      "function": "android_type",
+      "module": "both",
+      "args": {
+        "text": "hello world",
+        "clear_first": false
+      },
+      "mock_response": {
+        "status_code": 200,
+        "json": {
+          "success": true
+        }
+      },
+      "expected_keys": [
+        "success"
+      ],
+      "expected_values": {
+        "success": true
+      }
+    },
+    {
+      "name": "android_swipe_down",
+      "function": "android_swipe",
+      "module": "both",
+      "args": {
+        "direction": "down"
+      },
+      "mock_response": {
+        "status_code": 200,
+        "json": {
+          "success": true
+        }
+      },
+      "expected_keys": [
+        "success"
+      ],
+      "expected_values": {
+        "success": true
+      }
+    },
+    {
+      "name": "android_open_app",
+      "function": "android_open_app",
+      "module": "both",
+      "args": {
+        "package": "com.example.app"
+      },
+      "mock_response": {
+        "status_code": 200,
+        "json": {
+          "success": true
+        }
+      },
+      "expected_keys": [
+        "success"
+      ],
+      "expected_values": {
+        "success": true
+      }
+    },
+    {
+      "name": "android_send_intent_basic",
+      "function": "android_send_intent",
+      "module": "both",
+      "args": {
+        "action": "android.intent.action.VIEW",
+        "data_uri": "https://example.com"
+      },
+      "mock_response": {
+        "status_code": 200,
+        "json": {
+          "success": true
+        }
+      },
+      "expected_keys": [
+        "success"
+      ],
+      "expected_values": {
+        "success": true
+      }
+    },
+    {
+      "name": "android_broadcast_basic",
+      "function": "android_broadcast",
+      "module": "both",
+      "args": {
+        "action": "com.example.ACTION_TEST"
+      },
+      "mock_response": {
+        "status_code": 200,
+        "json": {
+          "success": true
+        }
+      },
+      "expected_keys": [
+        "success"
+      ],
+      "expected_values": {
+        "success": true
+      }
+    },
+    {
+      "name": "android_get_apps",
+      "function": "android_get_apps",
+      "module": "both",
+      "mock_response": {
+        "status_code": 200,
+        "json": {
+          "apps": [
+            {
+              "package": "com.example",
+              "name": "Example"
+            }
+          ]
+        }
+      },
+      "expected_keys": [
+        "apps"
+      ],
+      "expected_values": {}
+    }
+  ],
+  "error_fixtures": [
+    {
+      "name": "android_ping_http_error",
+      "function": "android_ping",
+      "module": "both",
+      "mock_response": {
+        "status_code": 503,
+        "json": {
+          "error": "phone not connected"
+        }
+      },
+      "expected_keys": [
+        "error"
+      ],
+      "expected_values": {}
+    },
+    {
+      "name": "android_tap_connection_error",
+      "function": "android_tap",
+      "module": "both",
+      "args": {
+        "x": 100,
+        "y": 200
+      },
+      "mock_exception": "ConnectionError",
+      "expected_keys": [
+        "error"
+      ],
+      "expected_values": {}
+    }
+  ],
+  "capability_flow_fixtures": [
+    {
+      "name": "flow_simple_success",
+      "module": "tools",
+      "steps": [
+        {
+          "action": "android_tap",
+          "params": {
+            "x": 100,
+            "y": 200
+          },
+          "verifier": "screen_changed"
+        }
+      ],
+      "handler_results": {
+        "android_tap": {
+          "success": true
+        },
+        "screen_changed": {
+          "outcome": "confirmed",
+          "observer": "screen_hash"
+        }
+      },
+      "expected_status": "success",
+      "required_keys": [
+        "status",
+        "trace"
+      ]
+    },
+    {
+      "name": "flow_verification_failed",
+      "module": "tools",
+      "steps": [
+        {
+          "action": "android_tap",
+          "params": {
+            "x": 100,
+            "y": 200
+          },
+          "verifier": "screen_changed"
+        }
+      ],
+      "handler_results": {
+        "android_tap": {
+          "success": true
+        },
+        "screen_changed": {
+          "outcome": "inconclusive"
+        }
+      },
+      "expected_status": "failure",
+      "required_keys": [
+        "status",
+        "failure_class"
+      ]
+    }
+  ],
+  "policy_fixtures": [
+    {
+      "name": "reversible_action",
+      "action": "android_tap",
+      "expected_classification": "reversible"
+    },
+    {
+      "name": "confirmation_required_action",
+      "action": "message_send",
+      "expected_classification": "confirmation_required"
+    },
+    {
+      "name": "prohibited_action",
+      "action": "factory_reset",
+      "expected_classification": "prohibited"
+    }
+  ]
+}
