@@ -231,80 +231,71 @@ class TestErrorParity:
 
 
 class TestCapabilityFlow:
-    """Verify CapabilityService produces correct result shapes (tools-only)."""
+    """Verify CapabilityService produces correct result shapes (tools-only).
+    Uses capability_flow_fixtures from contract_fixtures.json."""
 
-    def test_flow_simple_success(self):
-        """Simple flow with confirmed verifier returns success with trace."""
+    @pytest.mark.parametrize(
+        "fixture",
+        FIXTURES["capability_flow_fixtures"],
+        ids=[f["name"] for f in FIXTURES["capability_flow_fixtures"]],
+    )
+    def test_capability_flow(self, fixture):
         from tools.capabilities.service import CapabilityService
-        from tools.capabilities.models import VerificationResult, VerificationOutcome
+        from tools.capabilities.models import (
+            VerificationResult, VerificationOutcome, EvidenceReference,
+        )
 
-        from tools.capabilities.models import EvidenceReference
+        handler_results = fixture["handler_results"]
 
         class FakeHandler:
             def execute(self, action, params):
-                return {"success": True}
+                return handler_results.get(action, {"success": True})
             def verify(self, verifier, params):
+                vh = handler_results.get(verifier, {})
+                outcome = VerificationOutcome(vh.get("outcome", "inconclusive"))
+                evidence = None
+                if outcome == VerificationOutcome.CONFIRMED:
+                    evidence = EvidenceReference(
+                        evidence_id="ev_test",
+                        observer_type=vh.get("observer", "hash"),
+                        timestamp=0,
+                        safe_summary="test evidence",
+                    )
                 return VerificationResult(
-                    outcome=VerificationOutcome.CONFIRMED,
-                    verifier_type="screen_hash",
-                    evidence_ref=EvidenceReference(
-                        evidence_id="ev_test_001",
-                        observer_type="hash",
-                        timestamp=1784853566.535857,
-                        safe_summary="screen hash matched",
-                    ),
+                    outcome=outcome,
+                    verifier_type=verifier,
+                    evidence_ref=evidence,
                 )
 
         service = CapabilityService(FakeHandler())
-        steps = [{"action": "android_tap", "params": {"x": 100, "y": 200}, "verifier": "screen_changed"}]
-        result = json.loads(service.execute_flow(steps, capability="tap"))
+        result = json.loads(service.execute_flow(
+            fixture["steps"],
+            capability=fixture.get("capability", "test"),
+        ))
 
-        assert result["status"] == "success"
-        assert "trace_id" in result
-        assert len(result["evidence_refs"]) > 0
-
-    def test_flow_verification_failed(self):
-        """Flow with inconclusive verifier returns failure."""
-        from tools.capabilities.service import CapabilityService
-        from tools.capabilities.models import VerificationResult, VerificationOutcome
-
-        class FakeHandler:
-            def execute(self, action, params):
-                return {"success": True}
-            def verify(self, verifier, params):
-                return VerificationResult(
-                    outcome=VerificationOutcome.INCONCLUSIVE,
-                    verifier_type="screen_hash",
-                )
-
-        service = CapabilityService(FakeHandler())
-        steps = [{"action": "android_tap", "params": {"x": 100, "y": 200}, "verifier": "screen_changed"}]
-        result = json.loads(service.execute_flow(steps, capability="tap"))
-
-        assert result["status"] == "failure"
-        assert "failure_class" in result
+        assert result["status"] == fixture["expected_status"]
+        for key in fixture.get("required_keys", []):
+            assert key in result, f"Missing required key '{key}' in result: {result}"
 
 
 class TestPolicyClassification:
-    """Verify PolicyGate classifies actions correctly."""
+    """Verify PolicyGate classifies actions correctly.
+    Uses policy_fixtures from contract_fixtures.json."""
 
-    def test_reversible_action(self):
+    @pytest.mark.parametrize(
+        "fixture",
+        FIXTURES["policy_fixtures"],
+        ids=[f["name"] for f in FIXTURES["policy_fixtures"]],
+    )
+    def test_policy_classification(self, fixture):
         from tools.capabilities.policy import classify_action
         from tools.capabilities.models import ActionClassification
-        result = classify_action("android_tap")
-        assert result == ActionClassification.ORDINARY_REVERSIBLE
 
-    def test_confirmation_required_action(self):
-        from tools.capabilities.policy import classify_action
-        from tools.capabilities.models import ActionClassification
-        result = classify_action("message.send")
-        assert result == ActionClassification.CONFIRMATION_REQUIRED
-
-    def test_prohibited_action(self):
-        from tools.capabilities.policy import classify_action
-        from tools.capabilities.models import ActionClassification
-        result = classify_action("factory_reset")
-        assert result == ActionClassification.PROHIBITED
+        result = classify_action(fixture["action"])
+        expected = ActionClassification(fixture["expected_classification"])
+        assert result == expected, (
+            f"classify_action('{fixture['action']}') = {result}, expected {expected}"
+        )
 
 
 class TestDriftDetection:
@@ -331,7 +322,7 @@ class TestDriftDetection:
         sig2 = inspect.signature(getattr(plugin_mod, "android_tap"))
         assert str(sig1) == str(sig2)
         # Verify a mismatch would be caught
-        assert str(sig1) != "(x: int, y: int)" or True  # baseline
+        assert str(sig1) == str(sig2)  # verified equal above
 
     def test_route_drift_detected(self):
         """Adding a route to only one copy should be caught."""
