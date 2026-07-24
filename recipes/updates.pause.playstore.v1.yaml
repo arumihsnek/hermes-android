@@ -1,0 +1,42 @@
+id: playstore.updates.pause.v1
+capability: updates.pause
+package: com.android.vending
+version: "1.0.0"
+maturity: candidate
+steps:
+  - action: android_open_app
+    params:
+      packageName: com.android.vending
+    verifier: screen_transition
+    verifier_params:
+      expected_package: com.android.vending
+  - action: android_tap_text
+    params:
+      text: Settings
+      exact: false
+  - action: android_tap_text
+    params:
+      text: Network preferences
+      exact: false
+  - action: android_tap_text
+    params:
+      text: Auto-update apps
+      exact: false
+  - action: android_tap_text
+    params:
+      text: "Don't auto-update apps"
+      exact: false
+    fallback:
+      action: android_tap_text
+      params:
+        text: "Don't auto-update"
+        exact: false
+    verifier: node_predicate
+    verifier_params:
+      text: "Don't auto-update apps"
+verifier:
+  type: node_predicate
+fingerprint:
+  device: pixel8
+  android_version: "15"
+  sdk_int: 35

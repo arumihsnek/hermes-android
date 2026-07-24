@@ -1,0 +1,42 @@
+id: waze.route.start.v1
+capability: route.start
+package: com.waze
+version: "1.0.0"
+maturity: candidate
+steps:
+  - action: android_open_app
+    params:
+      packageName: com.waze
+    verifier: screen_transition
+    verifier_params:
+      expected_package: com.waze
+  - action: android_tap_text
+    params:
+      text: Search
+      exact: false
+  - action: android_type_text
+    params:
+      text: "{destination}"
+  - action: android_tap_text
+    params:
+      text: "{destination}"
+      exact: false
+    retries: 1
+  - action: android_tap_text
+    params:
+      text: Go
+      exact: false
+    fallback:
+      action: android_tap_text
+      params:
+        text: Navigate
+        exact: false
+    verifier: route_active
+    verifier_params:
+      destination: "{destination}"
+verifier:
+  type: route_active
+fingerprint:
+  device: pixel8
+  android_version: "15"
+  sdk_int: 35

@@ -1,0 +1,50 @@
+id: antennapod.podcast.subscribe.v1
+capability: podcast.subscribe
+package: de.danoeh.antennapod
+version: "1.0.0"
+maturity: candidate
+steps:
+  - action: android_open_app
+    params:
+      packageName: de.danoeh.antennapod
+    verifier: screen_transition
+    verifier_params:
+      expected_package: de.danoeh.antennapod
+  - action: android_tap_text
+    params:
+      text: Add Podcast
+      exact: false
+    fallback:
+      action: android_tap_text
+      params:
+        text: Search
+        exact: false
+  - action: android_type_text
+    params:
+      text: "{podcast_name}"
+  - action: android_press_key
+    params:
+      key: ENTER
+  - action: android_tap_text
+    params:
+      text: "{podcast_name}"
+      exact: false
+    retries: 1
+  - action: android_tap_text
+    params:
+      text: Subscribe
+      exact: false
+    fallback:
+      action: android_tap_text
+      params:
+        text: Add
+        exact: false
+    verifier: node_predicate
+    verifier_params:
+      text: Subscribed
+verifier:
+  type: node_predicate
+fingerprint:
+  device: pixel8
+  android_version: "15"
+  sdk_int: 35

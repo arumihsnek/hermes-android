@@ -1,0 +1,42 @@
+id: whatsapp.message.send.v1
+capability: message.send
+package: com.whatsapp
+version: "1.0.0"
+maturity: candidate
+steps:
+  - action: android_open_app
+    params:
+      packageName: com.whatsapp
+    verifier: screen_transition
+    verifier_params:
+      expected_package: com.whatsapp
+  - action: android_tap_text
+    params:
+      text: "{contact}"
+      exact: false
+    retries: 1
+  - action: android_type_text
+    params:
+      text: "{message}"
+    verifier: node_predicate
+    verifier_params:
+      text: "{message}"
+  # SAFETY: send step requires confirmation_token from user
+  # Uses semantic action 'message.send' which is CONFIRMATION_REQUIRED
+  - action: message.send
+    params:
+      text: Send
+      exact: false
+    confirmation_token: user_confirmed_send
+    verifier: notification_pattern
+    verifier_params:
+      pattern: sent
+verifier:
+  type: notification_pattern
+fingerprint:
+  device: pixel8
+  android_version: "15"
+  sdk_int: 35
+safety:
+  confirmation_required: true
+  stop_before_send: true

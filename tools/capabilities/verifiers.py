@@ -179,6 +179,68 @@ class NodePredicateVerifier(Verifier):
         )
 
 
+class RouteActiveVerifier(Verifier):
+    """Verify a navigation route is active."""
+    name = "route_active"
+
+    def __init__(self, destination: str = ""):
+        self.destination = destination
+
+    def verify(self, observer_data: dict[str, Any]) -> VerificationResult:
+        if not observer_data:
+            return VerificationResult(
+                outcome=VerificationOutcome.INCONCLUSIVE,
+                verifier_type=self.name,
+            )
+        navigating = observer_data.get("navigating", False)
+        if navigating:
+            return VerificationResult(
+                outcome=VerificationOutcome.CONFIRMED,
+                verifier_type=self.name,
+                evidence_ref=EvidenceReference(
+                    evidence_id=f"route_{uuid.uuid4().hex[:8]}",
+                    observer_type="navigation_state",
+                    timestamp=time.time(),
+                    safe_summary=f"Route active to {self.destination[:50]}",
+                ),
+            )
+        return VerificationResult(
+            outcome=VerificationOutcome.INCONCLUSIVE,
+            verifier_type=self.name,
+        )
+
+
+class FavoriteSavedVerifier(Verifier):
+    """Verify a location was saved as favorite."""
+    name = "favorite_saved"
+
+    def __init__(self, place_name: str = ""):
+        self.place_name = place_name
+
+    def verify(self, observer_data: dict[str, Any]) -> VerificationResult:
+        if not observer_data:
+            return VerificationResult(
+                outcome=VerificationOutcome.INCONCLUSIVE,
+                verifier_type=self.name,
+            )
+        saved = observer_data.get("saved", False)
+        if saved:
+            return VerificationResult(
+                outcome=VerificationOutcome.CONFIRMED,
+                verifier_type=self.name,
+                evidence_ref=EvidenceReference(
+                    evidence_id=f"fav_{uuid.uuid4().hex[:8]}",
+                    observer_type="favorite_state",
+                    timestamp=time.time(),
+                    safe_summary=f"Favorite saved: {self.place_name[:50]}",
+                ),
+            )
+        return VerificationResult(
+            outcome=VerificationOutcome.INCONCLUSIVE,
+            verifier_type=self.name,
+        )
+
+
 class ScreenTransitionVerifier(Verifier):
     """Verify the screen changed from a previous state."""
     name = "screen_transition"

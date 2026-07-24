@@ -1,0 +1,33 @@
+id: clock.timer.set.v1
+capability: timer.set
+package: com.google.android.deskclock
+version: "1.0.0"
+maturity: candidate
+steps:
+  - action: android_open_app
+    params:
+      packageName: com.google.android.deskclock
+    verifier: screen_transition
+    verifier_params:
+      expected_package: com.google.android.deskclock
+  - action: android_tap_text
+    params:
+      text: Timer
+      exact: false
+    retries: 1
+  - action: android_tap_text
+    params:
+      text: "Start"
+      exact: true
+    verifier: timer_exists
+    verifier_params:
+      duration_seconds: 60
+verifier:
+  type: timer_exists
+fingerprint:
+  device: pixel8
+  android_version: "15"
+  sdk_int: 35
+invalidation_conditions:
+  - app_version_change
+  - ui_layout_change
