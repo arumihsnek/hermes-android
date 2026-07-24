@@ -23,6 +23,8 @@
     <uses-feature android:name="android.hardware.telephony" android:required="false" />
     <uses-feature android:name="android.hardware.telephony.gsm" android:required="false" />
     <uses-feature android:name="android.hardware.location.gps" android:required="false" />
+    <!-- Set timers and alarms via Clock app (SET_TIMER intent) -->
+    <uses-permission android:name="com.android.alarm.permission.SET_ALARM" />
     <!-- Run commands inside Termux (host terminal) — requires allow-external-apps=true in Termux -->
     <uses-permission android:name="com.termux.permission.RUN_COMMAND" />
 

@@ -134,9 +134,32 @@ fun Application.configureRouting() {
         }
 
         post("/open_app") {
-            data class OpenAppRequest(val packageName: String)
+            data class OpenAppRequest(
+                val packageName: String? = null,
+                @com.google.gson.annotations.SerializedName("package") val pkgAlias: String? = null
+            )
             val req = call.receive<OpenAppRequest>()
-            val result = ActionExecutor.openApp(req.packageName)
+            // Canonical: packageName. Alias: package (deprecated).
+            val resolved = when {
+                req.packageName != null && req.pkgAlias != null -> {
+                    if (req.packageName != req.pkgAlias) {
+                        call.respond(mapOf("success" to false, "error" to "Conflicting 'package' and 'packageName' fields"))
+                        return@post
+                    }
+                    req.packageName
+                }
+                req.packageName != null -> req.packageName
+                req.pkgAlias != null -> req.pkgAlias // normalize deprecated alias
+                else -> {
+                    call.respond(mapOf("success" to false, "error" to "Missing 'packageName' field"))
+                    return@post
+                }
+            }
+            if (resolved.isBlank()) {
+                call.respond(mapOf("success" to false, "error" to "Package name cannot be empty"))
+                return@post
+            }
+            val result = ActionExecutor.openApp(resolved)
             call.respond(result)
         }
 
@@ -184,11 +207,58 @@ fun Application.configureRouting() {
         get("/current_app") {
             val result = withContext(Dispatchers.Main) {
                 val service = BridgeAccessibilityService.instance
-                val root = service?.windows?.firstOrNull()?.root
-                val pkg = root?.packageName?.toString() ?: "unknown"
-                val cls = root?.className?.toString() ?: "unknown"
-                root?.recycle()
-                mapOf("package" to pkg, "className" to cls)
+                val systemPkgs = setOf(
+                    "com.android.systemui",
+                    "com.google.android.packageinstaller",
+                    "com.android.permissioncontroller",
+                    "com.android.documentsui",
+                    "com.android.inputmethod.latin",
+                    "com.android.launcher",
+                    "com.google.android.apps.nexuslauncher",
+                    "com.android.emulator",
+                    "com.android.shell",
+                )
+
+                // Strategy 1: Find first non-system window
+                var bestPkg: String? = null
+                var bestCls: String? = null
+                val discarded = mutableListOf<String>()
+
+                for (window in service?.windows ?: emptyList()) {
+                    val root = window.root ?: continue
+                    val pkg = root.packageName?.toString() ?: continue
+                    val cls = root.className?.toString() ?: ""
+
+                    if (pkg in systemPkgs) {
+                        discarded.add(pkg)
+                        root.recycle()
+                        continue
+                    }
+
+                    // Found a real app window
+                    bestPkg = pkg
+                    bestCls = cls
+                    root.recycle()
+                    break
+                }
+
+                // Strategy 2: If only system windows, use first window
+                if (bestPkg == null) {
+                    val root = service?.windows?.firstOrNull()?.root
+                    bestPkg = root?.packageName?.toString() ?: "unknown"
+                    bestCls = root?.className?.toString() ?: "unknown"
+                    root?.recycle()
+                }
+
+                val quality = if (bestPkg in systemPkgs) "best_effort" else "confirmed"
+
+                mapOf(
+                    "package" to bestPkg,
+                    "className" to bestCls,
+                    "quality" to quality,
+                    "source" to "accessibility",
+                    "discarded" to discarded
+                )
             }
             call.respond(result)
         }
