@@ -1,0 +1,217 @@
+{
+  "test_run": "2025-07-25T01:09-01:20Z",
+  "vertical_slice": "HermesBridge \u2192 Tasker \u2192 DevicePolicyManager",
+  "transport": "am broadcast \u2192 Tasker Profile (com.hermes.tasker.HERMES_JAVA_RUNNER) \u2192 Task 192 \u2192 JavaScriptlet eval(source)",
+  "executor": "tasker_process",
+  "device": {
+    "model": "Pixel 8",
+    "tasker_version": "6.7.6-beta",
+    "device_owner": true,
+    "tasker_pid": 3836,
+    "tasker_uid": 10313
+  },
+  "results": {
+    "compare-tasker.json": {
+      "command_id": "compare-tasker",
+      "executor": "tasker_process",
+      "process_pid": 3836,
+      "timestamp_ms": 1784934723008,
+      "ok": true,
+      "device_owner": true,
+      "admin_active": true,
+      "admin_component": "net.dinglisch.android.taskerm/net.dinglisch.android.taskerm.MyDeviceAdminReceiver",
+      "device_model": "Pixel 8",
+      "android_version": "6.1.157-android14-11-gbd23337e42e7-ab14791245",
+      "sdk_version": "37"
+    },
+    "device_owner_status.json": {
+      "ok": true,
+      "device_owner": true,
+      "admin_active": true,
+      "admin_component": "net.dinglisch.android.taskerm/net.dinglisch.android.taskerm.MyDeviceAdminReceiver",
+      "executor": "tasker_process",
+      "process_pid": 3836,
+      "process_uid": 10313,
+      "timestamp_ms": 1784934545987
+    },
+    "dup-test.json": {
+      "command_id": "dup-test",
+      "executor": "tasker_process",
+      "process_pid": 3836,
+      "timestamp_ms": 1784934674446,
+      "ok": true,
+      "device_owner": true,
+      "admin_active": true,
+      "admin_component": "net.dinglisch.android.taskerm/net.dinglisch.android.taskerm.MyDeviceAdminReceiver",
+      "device_model": "Pixel 8",
+      "android_version": "6.1.157-android14-11-gbd23337e42e7-ab14791245",
+      "sdk_version": "37"
+    },
+    "final-test-001.json": {
+      "version": 1,
+      "command_id": "final-test-001",
+      "ok": true,
+      "status": "completed",
+      "capability": "device_owner.status",
+      "duration_ms": 274,
+      "result": {
+        "is_device_owner": true,
+        "package_name": "net.dinglisch.android.taskerm",
+        "admin_receiver": "net.dinglisch.android.taskerm.MyDeviceAdminReceiver",
+        "status": "active",
+        "device_model": "Pixel 8",
+        "android_version": "17",
+        "sdk_version": "37"
+      },
+      "error": null
+    },
+    "perf-0.json": {
+      "command_id": "perf-0",
+      "executor": "tasker_process",
+      "process_pid": 3836,
+      "timestamp_ms": 1784934728535,
+      "ok": true,
+      "device_owner": true,
+      "admin_active": true,
+      "admin_component": "net.dinglisch.android.taskerm/net.dinglisch.android.taskerm.MyDeviceAdminReceiver",
+      "device_model": "Pixel 8",
+      "android_version": "6.1.157-android14-11-gbd23337e42e7-ab14791245",
+      "sdk_version": "37"
+    },
+    "perf-1.json": {
+      "command_id": "perf-1",
+      "executor": "tasker_process",
+      "process_pid": 3836,
+      "timestamp_ms": 1784934732327,
+      "ok": true,
+      "device_owner": true,
+      "admin_active": true,
+      "admin_component": "net.dinglisch.android.taskerm/net.dinglisch.android.taskerm.MyDeviceAdminReceiver",
+      "device_model": "Pixel 8",
+      "android_version": "6.1.157-android14-11-gbd23337e42e7-ab14791245",
+      "sdk_version": "37"
+    },
+    "perf-2.json": {
+      "command_id": "perf-2",
+      "executor": "tasker_process",
+      "process_pid": 3836,
+      "timestamp_ms": 1784934735863,
+      "ok": true,
+      "device_owner": true,
+      "admin_active": true,
+      "admin_component": "net.dinglisch.android.taskerm/net.dinglisch.android.taskerm.MyDeviceAdminReceiver",
+      "device_model": "Pixel 8",
+      "android_version": "6.1.157-android14-11-gbd23337e42e7-ab14791245",
+      "sdk_version": "37"
+    },
+    "perf-3.json": {
+      "command_id": "perf-3",
+      "executor": "tasker_process",
+      "process_pid": 3836,
+      "timestamp_ms": 1784934739540,
+      "ok": true,
+      "device_owner": true,
+      "admin_active": true,
+      "admin_component": "net.dinglisch.android.taskerm/net.dinglisch.android.taskerm.MyDeviceAdminReceiver",
+      "device_model": "Pixel 8",
+      "android_version": "6.1.157-android14-11-gbd23337e42e7-ab14791245",
+      "sdk_version": "37"
+    },
+    "perf-4.json": {
+      "command_id": "perf-4",
+      "executor": "tasker_process",
+      "process_pid": 3836,
+      "timestamp_ms": 1784934743125,
+      "ok": true,
+      "device_owner": true,
+      "admin_active": true,
+      "admin_component": "net.dinglisch.android.taskerm/net.dinglisch.android.taskerm.MyDeviceAdminReceiver",
+      "device_model": "Pixel 8",
+      "android_version": "6.1.157-android14-11-gbd23337e42e7-ab14791245",
+      "sdk_version": "37"
+    },
+    "rapid-6a.json": {
+      "command_id": "rapid-6a",
+      "executor": "tasker_process",
+      "process_pid": 3836,
+      "timestamp_ms": 1784934658478,
+      "ok": true,
+      "device_owner": true,
+      "admin_active": true,
+      "admin_component": "net.dinglisch.android.taskerm/net.dinglisch.android.taskerm.MyDeviceAdminReceiver",
+      "device_model": "Pixel 8",
+      "android_version": "6.1.157-android14-11-gbd23337e42e7-ab14791245",
+      "sdk_version": "37"
+    },
+    "rapid-6b.json": {
+      "command_id": "rapid-6b",
+      "executor": "tasker_process",
+      "process_pid": 3836,
+      "timestamp_ms": 1784934659838,
+      "ok": true,
+      "device_owner": true,
+      "admin_active": true,
+      "admin_component": "net.dinglisch.android.taskerm/net.dinglisch.android.taskerm.MyDeviceAdminReceiver",
+      "device_model": "Pixel 8",
+      "android_version": "6.1.157-android14-11-gbd23337e42e7-ab14791245",
+      "sdk_version": "37"
+    },
+    "test-001.json": {
+      "ok": true,
+      "device_owner": true,
+      "admin_active": true,
+      "admin_component": "net.dinglisch.android.taskerm/net.dinglisch.android.taskerm.MyDeviceAdminReceiver",
+      "executor": "tasker_process",
+      "process_pid": 3836,
+      "timestamp_ms": 1784934591443
+    },
+    "test-002.json": {
+      "ok": false,
+      "error_code": "invalid_token",
+      "error_message": "Token rejected",
+      "executor": "tasker_process"
+    },
+    "test-003.json": {
+      "ok": false,
+      "error_code": "unknown_capability",
+      "error_message": "Unknown: nonexistent.capability",
+      "executor": "tasker_process"
+    },
+    "timeout-test.json": {
+      "command_id": "timeout-test",
+      "executor": "tasker_process",
+      "process_pid": 3836,
+      "timestamp_ms": 1784934653225,
+      "ok": true,
+      "device_owner": true,
+      "admin_active": true,
+      "admin_component": "net.dinglisch.android.taskerm/net.dinglisch.android.taskerm.MyDeviceAdminReceiver",
+      "device_model": "Pixel 8",
+      "android_version": "6.1.157-android14-11-gbd23337e42e7-ab14791245",
+      "sdk_version": "37"
+    },
+    "unknown.json": {
+      "command_id": "unknown",
+      "executor": "tasker_process",
+      "process_pid": 3836,
+      "timestamp_ms": 1784934717493,
+      "ok": false,
+      "error_code": "invalid_token",
+      "error_message": "Token rejected"
+    }
+  },
+  "runlog_tail": "",
+  "test_count": 10,
+  "tests_passed": 10,
+  "key_findings": [
+    "JSON.stringify() not available in Tasker Rhino \u2014 must use org.json.JSONObject",
+    "context.getSystemService('device_policy') returns DPM from Tasker's own Context",
+    "File I/O via java.io.FileWriter works from eval() \u2014 must .close() the writer",
+    "Transport via am broadcast (not /broadcast HTTP endpoint) required",
+    "Tasker process PID=3836 UID=10313 \u2014 distinct from shizuku (UID 2000)",
+    "Shell preflight ~430ms vs Tasker process ~3600ms (includes file-polling overhead)",
+    "Bad JSON envelope handled by task's try/catch \u2014 graceful rejection",
+    "Concurrent calls serialized by Tasker's RxJava execution model",
+    "Duplicate command_ids overwrite response file (last-write-wins)"
+  ]
+}
