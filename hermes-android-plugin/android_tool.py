@@ -1042,21 +1042,15 @@ class _BridgeFlowHandler:
 
 
 def _get_device_fingerprint():
-    """Get device fingerprint from bridge."""
-    from ..capabilities.models import DeviceFingerprint
-    try:
-        data = _get("/current_app")
-        return DeviceFingerprint(
-            device_id="unknown",
-            android_version="unknown",
-            sdk_int=0,
-        )
-    except Exception:
-        return DeviceFingerprint(
-            device_id="unknown",
-            android_version="unknown",
-            sdk_int=0,
-        )
+    """Get device fingerprint from bridge.
+
+    Uses /device/info endpoint for real device identity, version, SDK,
+    manufacturer, model, and package fingerprints.
+
+    Raises on bridge failure instead of silently returning sdk_int=0.
+    """
+    from ..capabilities.fingerprint import get_device_fingerprint
+    return get_device_fingerprint()
 
 
 def _get_public_ip() -> str:

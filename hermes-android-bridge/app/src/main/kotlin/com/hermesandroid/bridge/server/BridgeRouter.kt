@@ -35,6 +35,51 @@ fun Application.configureRouting() {
             ))
         }
 
+        get("/device/info") {
+            // Structured device identity for capability system
+            val androidContext = application as com.hermesandroid.bridge.BridgeApplication
+            val packageManagerAndroid = androidContext.packageManager
+
+            val deviceBuilder = mutableMapOf<String, Any>()
+            deviceBuilder["device_id"] = "${android.os.Build.MANUFACTURER}_${android.os.Build.MODEL}".lowercase().replace(" ", "_")
+            deviceBuilder["android_version"] = android.os.Build.VERSION.RELEASE
+            deviceBuilder["sdk_int"] = android.os.Build.VERSION.SDK_INT
+            deviceBuilder["manufacturer"] = android.os.Build.MANUFACTURER
+            deviceBuilder["model"] = android.os.Build.MODEL
+
+            // Package fingerprints for requested packages (or well-known defaults)
+            val requestedPackages = call.request.queryParameters["packages"]?.split(",")?.filter { it.isNotBlank() }
+            val packages = mutableMapOf<String, Any>()
+            val queryPackages = requestedPackages ?: listOf(
+                "com.google.android.deskclock",
+                "de.danoeh.antennapod",
+                "com.whatsapp",
+                "com.waze",
+                "net.osmand.plus",
+                "com.android.vending"
+            )
+            for (pkg in queryPackages) {
+                try {
+                    val pkgInfo = packageManagerAndroid.getPackageInfo(pkg, 0)
+                    val lastUpdate = try {
+                        @Suppress("DEPRECATION")
+                        val pkgInfoFull = packageManagerAndroid.getPackageInfo(pkg, android.content.pm.PackageManager.GET_ACTIVITIES)
+                        pkgInfoFull.javaClass.getMethod("getLastUpdateTime").invoke(pkgInfoFull) as? Long ?: 0L
+                    } catch (_: Exception) { 0L }
+                    packages[pkg] = mapOf(
+                        "versionName" to (pkgInfo.versionName ?: "unknown"),
+                        "versionCode" to pkgInfo.longVersionCode.toInt(),
+                        "lastUpdateTime" to lastUpdate
+                    )
+                } catch (_: android.content.pm.PackageManager.NameNotFoundException) {
+                    // Package not installed — skip
+                }
+            }
+            deviceBuilder["packages"] = packages
+
+            call.respond(deviceBuilder)
+        }
+
         get("/screen") {
             val bounds = call.request.queryParameters["bounds"] == "true"
             val tree = withContext(Dispatchers.Main) {
