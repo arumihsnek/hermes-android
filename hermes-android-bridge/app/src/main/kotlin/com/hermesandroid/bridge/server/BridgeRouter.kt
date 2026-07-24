@@ -35,6 +35,54 @@ fun Application.configureRouting() {
             ))
         }
 
+        get("/device/info") {
+            // Structured device identity for capability system
+            val packageManagerAndroid = DeviceCapabilities.packageManager
+                ?: run {
+                    call.respond(mapOf("error" to "PackageManager not available"))
+                    return@get
+                }
+
+            val deviceBuilder = mutableMapOf<String, Any>()
+            deviceBuilder["device_id"] = "${android.os.Build.MANUFACTURER}_${android.os.Build.MODEL}".lowercase().replace(" ", "_")
+            deviceBuilder["android_version"] = android.os.Build.VERSION.RELEASE
+            deviceBuilder["sdk_int"] = android.os.Build.VERSION.SDK_INT
+            deviceBuilder["manufacturer"] = android.os.Build.MANUFACTURER
+            deviceBuilder["model"] = android.os.Build.MODEL
+
+            // Package fingerprints for requested packages (or well-known defaults)
+            val requestedPackages = call.request.queryParameters["packages"]?.split(",")?.filter { it.isNotBlank() }
+            val packages = mutableMapOf<String, Any>()
+            val queryPackages = requestedPackages ?: listOf(
+                "com.google.android.deskclock",
+                "de.danoeh.antennapod",
+                "com.whatsapp",
+                "com.waze",
+                "net.osmand.plus",
+                "com.android.vending"
+            )
+            for (pkg in queryPackages) {
+                try {
+                    val pkgInfo = packageManagerAndroid.getPackageInfo(pkg, 0)
+                    val lastUpdate = try {
+                        @Suppress("DEPRECATION")
+                        val pkgInfoFull = packageManagerAndroid.getPackageInfo(pkg, android.content.pm.PackageManager.GET_ACTIVITIES)
+                        pkgInfoFull.javaClass.getMethod("getLastUpdateTime").invoke(pkgInfoFull) as? Long ?: 0L
+                    } catch (_: Exception) { 0L }
+                    packages[pkg] = mapOf(
+                        "versionName" to (pkgInfo.versionName ?: "unknown"),
+                        "versionCode" to pkgInfo.longVersionCode.toInt(),
+                        "lastUpdateTime" to lastUpdate
+                    )
+                } catch (_: android.content.pm.PackageManager.NameNotFoundException) {
+                    // Package not installed — skip
+                }
+            }
+            deviceBuilder["packages"] = packages
+
+            call.respond(deviceBuilder)
+        }
+
         get("/screen") {
             val bounds = call.request.queryParameters["bounds"] == "true"
             val tree = withContext(Dispatchers.Main) {
@@ -61,6 +109,15 @@ fun Application.configureRouting() {
             call.respond(result)
         }
 
+        post("/tap_res_id") {
+            data class TapResIdRequest(val resId: String)
+            val req = call.receive<TapResIdRequest>()
+            val result = withContext(Dispatchers.Main) {
+                ActionExecutor.tapByResId(req.resId)
+            }
+            call.respond(result)
+        }
+
         post("/type") {
             data class TypeRequest(val text: String, val clearFirst: Boolean = false)
             val req = call.receive<TypeRequest>()
@@ -80,9 +137,32 @@ fun Application.configureRouting() {
         }
 
         post("/open_app") {
-            data class OpenAppRequest(val packageName: String)
+            data class OpenAppRequest(
+                val packageName: String? = null,
+                @com.google.gson.annotations.SerializedName("package") val pkgAlias: String? = null
+            )
             val req = call.receive<OpenAppRequest>()
-            val result = ActionExecutor.openApp(req.packageName)
+            // Canonical: packageName. Alias: package (deprecated).
+            val resolved = when {
+                req.packageName != null && req.pkgAlias != null -> {
+                    if (req.packageName != req.pkgAlias) {
+                        call.respond(mapOf("success" to false, "error" to "Conflicting 'package' and 'packageName' fields"))
+                        return@post
+                    }
+                    req.packageName
+                }
+                req.packageName != null -> req.packageName
+                req.pkgAlias != null -> req.pkgAlias // normalize deprecated alias
+                else -> {
+                    call.respond(mapOf("success" to false, "error" to "Missing 'packageName' field"))
+                    return@post
+                }
+            }
+            if (resolved.isBlank()) {
+                call.respond(mapOf("success" to false, "error" to "Package name cannot be empty"))
+                return@post
+            }
+            val result = ActionExecutor.openApp(resolved)
             call.respond(result)
         }
 
@@ -130,11 +210,58 @@ fun Application.configureRouting() {
         get("/current_app") {
             val result = withContext(Dispatchers.Main) {
                 val service = BridgeAccessibilityService.instance
-                val root = service?.windows?.firstOrNull()?.root
-                val pkg = root?.packageName?.toString() ?: "unknown"
-                val cls = root?.className?.toString() ?: "unknown"
-                root?.recycle()
-                mapOf("package" to pkg, "className" to cls)
+                val systemPkgs = setOf(
+                    "com.android.systemui",
+                    "com.google.android.packageinstaller",
+                    "com.android.permissioncontroller",
+                    "com.android.documentsui",
+                    "com.android.inputmethod.latin",
+                    "com.android.launcher",
+                    "com.google.android.apps.nexuslauncher",
+                    "com.android.emulator",
+                    "com.android.shell",
+                )
+
+                // Strategy 1: Find first non-system window
+                var bestPkg: String? = null
+                var bestCls: String? = null
+                val discarded = mutableListOf<String>()
+
+                for (window in service?.windows ?: emptyList()) {
+                    val root = window.root ?: continue
+                    val pkg = root.packageName?.toString() ?: continue
+                    val cls = root.className?.toString() ?: ""
+
+                    if (pkg in systemPkgs) {
+                        discarded.add(pkg)
+                        root.recycle()
+                        continue
+                    }
+
+                    // Found a real app window
+                    bestPkg = pkg
+                    bestCls = cls
+                    root.recycle()
+                    break
+                }
+
+                // Strategy 2: If only system windows, use first window
+                if (bestPkg == null) {
+                    val root = service?.windows?.firstOrNull()?.root
+                    bestPkg = root?.packageName?.toString() ?: "unknown"
+                    bestCls = root?.className?.toString() ?: "unknown"
+                    root?.recycle()
+                }
+
+                val quality = if (bestPkg in systemPkgs) "best_effort" else "confirmed"
+
+                mapOf(
+                    "package" to bestPkg,
+                    "className" to bestCls,
+                    "quality" to quality,
+                    "source" to "accessibility",
+                    "discarded" to discarded
+                )
             }
             call.respond(result)
         }

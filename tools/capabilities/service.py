@@ -47,6 +47,14 @@ class CapabilityService:
         self.policy = PolicyGate()
         self.executor = FlowExecutor(handler, self.policy)
         self._used_nonces: set[str] = set()
+        self._store = None  # Lazy-init persistence store
+
+    def _get_store(self):
+        """Lazy-init the persistence store."""
+        if self._store is None:
+            from .persistence import CapabilityStateStore
+            self._store = CapabilityStateStore()
+        return self._store
 
     def execute_flow(
         self,
@@ -198,6 +206,13 @@ class CapabilityService:
                 "error_message": str(e),
             })
 
+        # Persist the trace
+        try:
+            store = self._get_store()
+            store.save_trace(result.trace)
+        except Exception:
+            pass  # Best-effort persistence
+
         return json.dumps(result.to_dict())
 
     def check_action(
@@ -259,5 +274,9 @@ class CapabilityService:
             })
 
     def get_trace(self, trace_id: str) -> str:
-        """Get a trace by ID (stub — requires trace store)."""
-        return json.dumps({"error": "Trace store not implemented yet"})
+        """Get a trace by ID from the persistence store."""
+        store = self._get_store()
+        trace = store.get_trace(trace_id)
+        if trace is None:
+            return json.dumps({"error": f"Trace '{trace_id}' not found"})
+        return json.dumps(trace.to_dict())

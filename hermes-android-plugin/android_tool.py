@@ -972,27 +972,29 @@ def android_discover_capability(
 
 
 class _BridgeFlowHandler:
-    """FlowHandler that delegates to the bridge HTTP API."""
+    """FlowHandler that delegates to the bridge HTTP API.
+
+    Uses the canonical action contract for dispatch. Unknown actions
+    are rejected before making any HTTP call.
+    """
 
     def execute(self, action: str, params: dict) -> dict:
         """Execute a bridge action and return result dict."""
         try:
-            # Map action to bridge endpoint
-            endpoint_map = {
-                "android_tap": "/tap",
-                "android_tap_text": "/tap_text",
-                "android_type": "/type",
-                "android_swipe": "/swipe",
-                "android_open_app": "/open_app",
-                "android_press_key": "/press_key",
-                "android_scroll": "/scroll",
-                "android_send_intent": "/intent",
-                "android_broadcast": "/broadcast",
-            }
-            endpoint = endpoint_map.get(action)
-            if not endpoint:
+            from ..capabilities.action_contract import resolve_action, is_executable
+
+            # Resolve action through canonical catalog (handles aliases)
+            entry = resolve_action(action)
+            if entry is None:
                 return {"success": False, "error": f"Unknown action: {action}"}
 
+            if not is_executable(action):
+                return {"success": False,
+                        "error": f"Action '{action}' is semantic — must be resolved to executable actions before dispatch"}
+
+            endpoint = entry["bridge_endpoint"]
+
+            # Map action to bridge endpoint (canonical endpoint_map)
             data = _post(endpoint, params)
             return {"success": True, "data": data}
         except Exception as e:
@@ -1032,7 +1034,16 @@ class _BridgeFlowHandler:
         }
         verifier_cls = verifier_map.get(verifier)
         if verifier_cls:
-            v = verifier_cls(**params) if params else verifier_cls()
+            import inspect
+            sig = inspect.signature(verifier_cls.__init__)
+            # Only pass params that the verifier constructor accepts
+            valid_params = {}
+            for name in sig.parameters:
+                if name == 'self':
+                    continue
+                if name in params:
+                    valid_params[name] = params[name]
+            v = verifier_cls(**valid_params) if valid_params else verifier_cls()
             return v.verify(observer_data)
 
         return VerificationResult(
@@ -1042,21 +1053,15 @@ class _BridgeFlowHandler:
 
 
 def _get_device_fingerprint():
-    """Get device fingerprint from bridge."""
-    from ..capabilities.models import DeviceFingerprint
-    try:
-        data = _get("/current_app")
-        return DeviceFingerprint(
-            device_id="unknown",
-            android_version="unknown",
-            sdk_int=0,
-        )
-    except Exception:
-        return DeviceFingerprint(
-            device_id="unknown",
-            android_version="unknown",
-            sdk_int=0,
-        )
+    """Get device fingerprint from bridge.
+
+    Uses /device/info endpoint for real device identity, version, SDK,
+    manufacturer, model, and package fingerprints.
+
+    Raises on bridge failure instead of silently returning sdk_int=0.
+    """
+    from ..capabilities.fingerprint import get_device_fingerprint
+    return get_device_fingerprint()
 
 
 def _get_public_ip() -> str:

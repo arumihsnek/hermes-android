@@ -261,6 +261,14 @@ class FlowExecutor:
                             "step": step_idx,
                             "error": str(e),
                         })
+                        # Propagate policy refusal from fallback
+                        return CapabilityResult(
+                            status=ResultStatus.REFUSED,
+                            capability=flow.capability,
+                            trace=trace,
+                            failure_class=e.failure_class if isinstance(e, AuthorizationRefused) else FailureClass.PROHIBITED_ACTION,
+                            error_message=str(e),
+                        )
 
                 if not step_success:
                     failure_class = FailureClass.HANDLER_RAISED
