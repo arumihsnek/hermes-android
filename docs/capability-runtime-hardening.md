@@ -135,9 +135,17 @@ This document describes the six-block hardening of the `hermes-android` capabili
 
 ## Limitations and Pending Work
 
-1. **Live dogfood**: Requires Pixel 8 connected via bridge; tests are prepared but skipped when unreachable
-2. **UI Automator (Plan C)**: Contract defined but no executor implemented yet
-3. **Media session observer**: Uses foreground app detection (not true MediaSession API)
-4. **Nonce TTL cleanup**: Nonces grow unbounded; should add periodic cleanup
-5. **Concurrent access**: SQLite handles single-process fine; multi-process needs WAL + retries
-6. **Kotlin bridge `/device/info`**: Uses `getLastUpdateTime` via reflection for compatibility
+1. **Live dogfood**: BLOCKED — phone not connected to relay. Test script prepared at
+   `tests/capabilities/test_live_dogfood.py`. Execute when phone connects with:
+   ```
+   ANDROID_BRIDGE_URL="http://localhost:18766" ANDROID_BRIDGE_TOKEN="REDACTED_BRIDGE_TOKEN_ROTATED" \
+     python3 tests/capabilities/test_live_dogfood.py
+   ```
+2. **`/device/info` endpoint**: Added to Kotlin `BridgeRouter.kt` but NOT yet deployed.
+   The existing bridge APK (v0.4.0) does not serve `/device/info`. Requires APK rebuild
+   and reinstall. Fallback: synthetic fingerprint from known device info.
+3. **UI Automator (Plan C)**: Contract defined but no executor implemented yet
+4. **Media session observer**: Uses foreground app detection (not true MediaSession API)
+5. **Nonce TTL cleanup**: Nonces grow unbounded; should add periodic cleanup
+6. **Concurrent access**: SQLite handles single-process fine; multi-process needs WAL + retries
+7. **Kotlin bridge `/device/info`**: Uses `getLastUpdateTime` via reflection for compatibility
