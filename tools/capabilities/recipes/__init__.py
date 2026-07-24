@@ -78,6 +78,30 @@ def validate_recipe(data: dict[str, Any]) -> list[str]:
     return errors
 
 
+def load_recipe_from_yaml(yaml_path: str) -> Recipe:
+    """Load a recipe from a YAML file."""
+    import yaml
+    with open(yaml_path) as f:
+        data = yaml.safe_load(f)
+    return load_recipe_from_dict(data)
+
+
+def load_recipes_from_directory(directory: str) -> list[Recipe]:
+    """Load all recipe YAML files from a directory."""
+    import os
+    recipes = []
+    if not os.path.isdir(directory):
+        return recipes
+    for fname in sorted(os.listdir(directory)):
+        if fname.endswith('.yaml') or fname.endswith('.yml'):
+            path = os.path.join(directory, fname)
+            try:
+                recipes.append(load_recipe_from_yaml(path))
+            except Exception:
+                continue
+    return recipes
+
+
 class RecipeRegistry:
     """Registry for loading, storing, and querying recipes."""
 

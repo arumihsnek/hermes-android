@@ -816,6 +816,41 @@ def android_flow(
         })
 
 
+def _get_adapter_registry():
+    """Get adapter registry with all vertical adapters registered."""
+    from tools.capabilities.adapters import AdapterRegistry
+    from tools.capabilities.adapters.clock_timer import ClockTimerAdapter
+    from tools.capabilities.adapters.antennapod_media import AntennaPodMediaAdapter
+    from tools.capabilities.adapters.antennapod_subscribe import AntennaPodSubscribeAdapter
+    from tools.capabilities.adapters.whatsapp_message import WhatsAppMessageAdapter
+    from tools.capabilities.adapters.waze_route import WazeRouteAdapter
+    from tools.capabilities.adapters.osmand_place import OsmAndPlaceAdapter
+    from tools.capabilities.adapters.playstore_updates import PlayStoreUpdatesAdapter
+
+    registry = AdapterRegistry()
+    registry.register(ClockTimerAdapter())
+    registry.register(AntennaPodMediaAdapter())
+    registry.register(AntennaPodSubscribeAdapter())
+    registry.register(WhatsAppMessageAdapter())
+    registry.register(WazeRouteAdapter())
+    registry.register(OsmAndPlaceAdapter())
+    registry.register(PlayStoreUpdatesAdapter())
+    return registry
+
+
+def _get_recipe_registry():
+    """Get recipe registry loaded from recipes/ YAML files."""
+    import os
+    from tools.capabilities.recipes import RecipeRegistry, load_recipes_from_directory
+
+    registry = RecipeRegistry()
+    recipe_dir = os.path.join(os.path.dirname(__file__), "..", "recipes")
+    recipe_dir = os.path.normpath(recipe_dir)
+    for recipe in load_recipes_from_directory(recipe_dir):
+        registry.register(recipe)
+    return registry
+
+
 def android_execute_capability(
     capability: str,
     params: dict = None,
@@ -833,7 +868,7 @@ def android_execute_capability(
         authorization: Authorization envelope for candidate/dogfood tiers
 
     Returns:
-        JSON with selected adapter, recipe, result status, and evidence.
+        JSON with selected adapter, recipe, flow result, and evidence.
     """
     try:
         from tools.capabilities.service import CapabilityService
@@ -843,26 +878,83 @@ def android_execute_capability(
         handler = _BridgeFlowHandler()
         service = CapabilityService(handler)
 
-        # Discover adapter
-        recipe_registry = RecipeRegistry()
-        adapter_registry = AdapterRegistry()
+        # Get populated registries
+        adapter_registry = _get_adapter_registry()
+        recipe_registry = _get_recipe_registry()
         fingerprint = _get_device_fingerprint()
 
+        # Select adapter
         adapter = adapter_registry.select(capability, fingerprint, package=package)
-        recipe = recipe_registry.find_by_capability(capability, package=package)
+        recipes = recipe_registry.find_by_capability(capability, package=package)
 
-        return json.dumps({
-            "capability": capability,
-            "adapter": adapter.name if adapter else None,
-            "recipe_id": recipe[0].id if recipe else None,
-            "status": "discovered",
-            "message": f"Capability '{capability}' ready for execution",
-        })
+        if not adapter:
+            return json.dumps({
+                "capability": capability,
+                "status": "error",
+                "error_message": f"No adapter found for '{capability}' on this device",
+                "available_capabilities": _list_capabilities(adapter_registry),
+            })
+
+        # Build flow from adapter
+        build_params = params or {}
+        if hasattr(adapter, "build_flow"):
+            flow_def = adapter.build_flow(**build_params)
+            # Convert FlowDefinition to steps list for service
+            steps = []
+            for step in flow_def.steps:
+                step_dict = {
+                    "action": step.action,
+                    "params": step.params,
+                    "verifier": step.verifier,
+                    "verifier_params": step.verifier_params,
+                    "timeout_ms": step.timeout_ms,
+                    "retries": step.retries,
+                    "confirmation_token": step.confirmation_token,
+                }
+                if step.fallback:
+                    step_dict["fallback"] = {
+                        "action": step.fallback.action,
+                        "params": step.fallback.params,
+                        "verifier": step.fallback.verifier,
+                        "verifier_params": step.fallback.verifier_params,
+                        "confirmation_token": step.fallback.confirmation_token,
+                    }
+                steps.append(step_dict)
+
+            # Execute through service with policy enforcement
+            result_json = service.execute_flow(
+                steps=steps,
+                capability=capability,
+                recipe_id=flow_def.recipe_id or (recipes[0].id if recipes else None),
+                tier=tier,
+                authorization=authorization,
+            )
+
+            result = json.loads(result_json)
+            result["adapter"] = adapter.name
+            result["capability"] = capability
+            return json.dumps(result)
+        else:
+            return json.dumps({
+                "capability": capability,
+                "adapter": adapter.name,
+                "recipe_id": recipes[0].id if recipes else None,
+                "status": "discovered",
+                "message": f"Adapter '{adapter.name}' found but has no build_flow()",
+            })
     except Exception as e:
         return json.dumps({
             "status": "error",
             "error_message": str(e),
         })
+
+
+def _list_capabilities(registry):
+    """List all capabilities in an adapter registry."""
+    caps = set()
+    for adapter in registry._adapters:
+        caps.add(adapter.capability)
+    return sorted(caps)
 
 
 def android_discover_capability(
@@ -936,6 +1028,8 @@ class _BridgeFlowHandler:
         from tools.capabilities.observers import select_observers
         from tools.capabilities.verifiers import (
             TimerExistsVerifier, MediaStateVerifier, ScreenTransitionVerifier,
+            NotificationPatternVerifier, NodePredicateVerifier,
+            RouteActiveVerifier, FavoriteSavedVerifier,
         )
         from tools.capabilities.models import VerificationResult, VerificationOutcome
 
@@ -955,6 +1049,11 @@ class _BridgeFlowHandler:
             "timer_exists": TimerExistsVerifier,
             "media_state": MediaStateVerifier,
             "screen_changed": ScreenTransitionVerifier,
+            "screen_transition": ScreenTransitionVerifier,
+            "notification_pattern": NotificationPatternVerifier,
+            "node_predicate": NodePredicateVerifier,
+            "route_active": RouteActiveVerifier,
+            "favorite_saved": FavoriteSavedVerifier,
         }
         verifier_cls = verifier_map.get(verifier)
         if verifier_cls:
