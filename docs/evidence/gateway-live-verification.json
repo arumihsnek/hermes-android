@@ -1,0 +1,114 @@
+{
+  "timestamp": "2026-07-24T19:32:14.753183",
+  "results": [
+    {
+      "test": "1_valid_call",
+      "request": {
+        "version": 1,
+        "command_id": "live-valid-001",
+        "capability": "device_owner.status",
+        "params": {},
+        "timeout_ms": 10000,
+        "token": "REDACTED_GW_TOKEN_ROTATED"
+      },
+      "response": {
+        "version": 1,
+        "command_id": "live-valid-001",
+        "ok": true,
+        "status": "completed",
+        "capability": "device_owner.status",
+        "duration_ms": 285,
+        "result": {
+          "is_device_owner": true,
+          "package_name": "net.dinglisch.android.taskerm",
+          "admin_receiver": "net.dinglisch.android.taskerm.MyDeviceAdminReceiver",
+          "status": "active",
+          "device_model": "Pixel 8",
+          "android_version": "17",
+          "sdk_version": "37"
+        },
+        "error": null
+      },
+      "duration_ms": 2239,
+      "passed": true
+    },
+    {
+      "test": "2_invalid_token",
+      "request": {
+        "version": 1,
+        "command_id": "live-invalid-token-002",
+        "capability": "device_owner.status",
+        "params": {},
+        "timeout_ms": 10000,
+        "token": "wrong-token-123"
+      },
+      "response": {
+        "version": 1,
+        "command_id": "live-invalid-token-002",
+        "ok": false,
+        "status": "error",
+        "capability": "device_owner.status",
+        "duration_ms": 0,
+        "result": {},
+        "error": {
+          "code": "AUTH_FAILED",
+          "message": "Invalid token",
+          "details": {}
+        }
+      },
+      "duration_ms": 3628,
+      "passed": true
+    },
+    {
+      "test": "3_unknown_capability",
+      "request": {
+        "version": 1,
+        "command_id": "live-unknown-cap-003",
+        "capability": "unknown.capability",
+        "params": {},
+        "timeout_ms": 10000,
+        "token": "REDACTED_GW_TOKEN_ROTATED"
+      },
+      "response": {
+        "version": 1,
+        "command_id": "live-unknown-cap-003",
+        "ok": false,
+        "status": "error",
+        "capability": "unknown.capability",
+        "duration_ms": 0,
+        "result": {},
+        "error": {
+          "code": "UNKNOWN_CAPABILITY",
+          "message": "Capability not in allowlist: unknown.capability",
+          "details": {}
+        }
+      },
+      "duration_ms": 1760,
+      "passed": true
+    },
+    {
+      "test": "4_invalid_json",
+      "request": {
+        "raw": "THIS IS NOT VALID JSON {{{"
+      },
+      "response": null,
+      "duration_ms": 2164,
+      "passed": true
+    },
+    {
+      "test": "5_deliberate_timeout",
+      "request": {
+        "version": 1,
+        "command_id": "live-timeout-005",
+        "capability": "device_owner.status",
+        "params": {},
+        "timeout_ms": 1000,
+        "token": "REDACTED_GW_TOKEN_ROTATED"
+      },
+      "response": null,
+      "duration_ms": 2000,
+      "passed": true
+    }
+  ],
+  "log": "2026-07-24 21:29:59 [GW] response written: final-test-001.json\n2026-07-24 21:29:59 [GW] request cleaned up\n2026-07-24 21:32:18 [GW] === started ===\n2026-07-24 21:32:18 [GW] processing: /sdcard/Tasker/gateway/requests/live-valid-001.json\n2026-07-24 21:32:18 [GW] cmd=live-valid-001 cap=device_owner.status\n2026-07-24 21:32:19 [GW] RESULT: is_do=true dur=285ms\n2026-07-24 21:32:19 [GW] response written: live-valid-001.json\n2026-07-24 21:32:19 [GW] request cleaned up\n2026-07-24 21:32:21 [GW] === started ===\n2026-07-24 21:32:21 [GW] processing: /sdcard/Tasker/gateway/requests/live-invalid-token-002.json\n2026-07-24 21:32:21 [GW] cmd=live-invalid-token-002 cap=device_owner.status\n2026-07-24 21:32:21 [GW] AUTH_FAILED\n2026-07-24 21:32:25 [GW] === started ===\n2026-07-24 21:32:25 [GW] processing: /sdcard/Tasker/gateway/requests/live-unknown-cap-003.json\n2026-07-24 21:32:26 [GW] cmd=live-unknown-cap-003 cap=unknown.capability\n2026-07-24 21:32:26 [GW] UNKNOWN: unknown.capability\n2026-07-24 21:32:28 [GW] === started ===\n2026-07-24 21:32:28 [GW] processing: /sdcard/Tasker/gateway/requests/live-invalid-json-004.json\n2026-07-24 21:32:29 [GW] cmd= cap=\n2026-07-24 21:32:29 [GW] AUTH_FAILED\n"
+}

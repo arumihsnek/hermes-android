@@ -1,0 +1,244 @@
+[
+  {
+    "test": "1.1_basic_java_execution",
+    "category": "lifecycle",
+    "hypothesis": "Each execution creates a new JVM instance. Static fields do NOT persist.",
+    "code": "\nimport java.util.*;\nimport org.json.*;\n\npublic class TestLifecycle {\n    static int staticCounter = 0;\n    static HashMap<String, Object> globalMap = new HashMap<>();\n    \n    public static void main(String[] args) throws Exception {\n        System.out.println(\"=== Test Lifecycle ===\");\n        \n        // Test static counter persistence\n        staticCounter++;\n        System.out.println(\"Static counter: \" + staticCounter);\n        \n        // Test global map persistence\n        globalMap.put(\"iteration\", staticCounter);\n        System.out.println(\"Global map: \" + globalMap);\n        \n        // Test variable scope\n        int localVar = 42;\n        System.out.println(\"Local variable: \" + localVar);\n        \n        // Test class definition\n        class InnerClass {\n            String name;\n            InnerClass(String name) { this.name = name; }\n            String getName() { return name; }\n        }\n        InnerClass inner = new InnerClass(\"test\");\n        System.out.println(\"Inner class: \" + inner.getName());\n        \n        System.out.println(\"=== Lifecycle Test Complete ===\");\n    }\n}\n",
+    "result": "sh: javac: inaccessible or not found\nJava execution failed\n\n---\nsh: javac: inaccessible or not found\nJava execution failed\n\n---\nsh: javac: inaccessible or not found\nJava execution failed\n",
+    "expected": "Static counter should be 1 each time (no persistence)",
+    "interpretation": "Check if static counter is always 1",
+    "confidence": "pending",
+    "timestamp": "2026-07-24T17:55:22.970588"
+  },
+  {
+    "test": "1.2_tasker_variable_persistence",
+    "category": "lifecycle",
+    "hypothesis": "Tasker global variables persist between task executions",
+    "code": "Tasker broadcast test",
+    "result": "Broadcasting: Intent { act=net.dinglisch.android.taskerm.ACTION_TASK flg=0x400000 (has extras) }\nBroadcast completed: result=0\n",
+    "expected": "Variable should persist if set as global",
+    "interpretation": "Check if global variables survive task restart",
+    "confidence": "pending",
+    "timestamp": "2026-07-24T17:55:23.219734"
+  },
+  {
+    "test": "2.1_javascriptlet_eval",
+    "category": "eval",
+    "hypothesis": "JavaScriptlet eval() executes in current scope",
+    "code": "Tasker JavaScriptlet test",
+    "result": "Broadcasting: Intent { act=net.dinglisch.android.taskerm.ACTION_TASK flg=0x400000 (has extras) }\nBroadcast completed: result=0\n",
+    "expected": "eval() should execute JavaScript code",
+    "interpretation": "Requires Tasker task creation",
+    "confidence": "pending",
+    "timestamp": "2026-07-24T17:55:23.633899"
+  },
+  {
+    "test": "3.1_source_file_loading",
+    "category": "source",
+    "hypothesis": "source() can load and execute external JavaScript files",
+    "code": "Requires Tasker JavaScriptlet task",
+    "result": "pending",
+    "expected": "source() should load file content",
+    "interpretation": "Requires Tasker task creation",
+    "confidence": "pending",
+    "timestamp": "2026-07-24T17:55:23.633929"
+  },
+  {
+    "test": "4.1_jsonobject",
+    "category": "objects",
+    "hypothesis": "JSONObject is available and functional",
+    "code": "\nimport org.json.*;\n\npublic class TestJSONObject {\n    public static void main(String[] args) throws Exception {\n        System.out.println(\"=== JSONObject Test ===\");\n        \n        JSONObject json = new JSONObject();\n        json.put(\"string\", \"hello\");\n        json.put(\"number\", 42);\n        json.put(\"boolean\", true);\n        json.put(\"null\", JSONObject.NULL);\n        \n        // Nested object\n        JSONObject nested = new JSONObject();\n        nested.put(\"key\", \"value\");\n        json.put(\"nested\", nested);\n        \n        // Array\n        org.json.JSONArray arr = new org.json.JSONArray();\n        arr.put(\"item1\");\n        arr.put(\"item2\");\n        json.put(\"array\", arr);\n        \n        System.out.println(\"JSON: \" + json.toString(2));\n        System.out.println(\"Length: \" + json.length());\n        \n        // Test modification\n        json.put(\"modified\", \"yes\");\n        System.out.println(\"After modification: \" + json.toString());\n        \n        System.out.println(\"=== JSONObject Test Complete ===\");\n    }\n}\n",
+    "result": "sh: javac: inaccessible or not found\nJSONObject test failed\n",
+    "expected": "JSONObject should create and manipulate JSON",
+    "interpretation": "Check if org.json is available in classpath",
+    "confidence": "pending",
+    "timestamp": "2026-07-24T17:55:24.817571"
+  },
+  {
+    "test": "4.2_hashmap",
+    "category": "objects",
+    "hypothesis": "HashMap works normally in Java runtime",
+    "code": "\nimport java.util.*;\n\npublic class TestHashMap {\n    public static void main(String[] args) throws Exception {\n        System.out.println(\"=== HashMap Test ===\");\n        \n        HashMap<String, Object> map = new HashMap<>();\n        map.put(\"key1\", \"value1\");\n        map.put(\"key2\", 42);\n        map.put(\"key3\", true);\n        \n        System.out.println(\"Map: \" + map);\n        System.out.println(\"Size: \" + map.size());\n        System.out.println(\"Contains key1: \" + map.containsKey(\"key1\"));\n        System.out.println(\"Get key1: \" + map.get(\"key1\"));\n        \n        // Test iteration\n        for (Map.Entry<String, Object> entry : map.entrySet()) {\n            System.out.println(\"Entry: \" + entry.getKey() + \" = \" + entry.getValue());\n        }\n        \n        System.out.println(\"=== HashMap Test Complete ===\");\n    }\n}\n",
+    "result": "sh: javac: inaccessible or not found\nHashMap test failed\n",
+    "expected": "HashMap should store and retrieve entries",
+    "interpretation": "Standard Java HashMap behavior",
+    "confidence": "pending",
+    "timestamp": "2026-07-24T17:55:25.946267"
+  },
+  {
+    "test": "4.3_arraylist",
+    "category": "objects",
+    "hypothesis": "ArrayList works normally in Java runtime",
+    "code": "\nimport java.util.*;\n\npublic class TestArrayList {\n    public static void main(String[] args) throws Exception {\n        System.out.println(\"=== ArrayList Test ===\");\n        \n        ArrayList<String> list = new ArrayList<>();\n        list.add(\"item1\");\n        list.add(\"item2\");\n        list.add(\"item3\");\n        \n        System.out.println(\"List: \" + list);\n        System.out.println(\"Size: \" + list.size());\n        System.out.println(\"Get(0): \" + list.get(0));\n        System.out.println(\"Contains item2: \" + list.contains(\"item2\"));\n        \n        // Test iteration\n        for (String item : list) {\n            System.out.println(\"Item: \" + item);\n        }\n        \n        System.out.println(\"=== ArrayList Test Complete ===\");\n    }\n}\n",
+    "result": "sh: javac: inaccessible or not found\nArrayList test failed\n",
+    "expected": "ArrayList should store and retrieve items",
+    "interpretation": "Standard Java ArrayList behavior",
+    "confidence": "pending",
+    "timestamp": "2026-07-24T17:55:27.265397"
+  },
+  {
+    "test": "5.1_shell_access",
+    "category": "tasker_api",
+    "hypothesis": "Shell commands execute with app permissions",
+    "code": "echo \"Shell test: $(date)\" && whoami && id && uname -a",
+    "result": "Shell test: Fri Jul 24 19:55:30 CEST 2026\nshell\nuid=2000(shell) gid=2000(shell) groups=2000(shell),1004(input),1007(log),1011(adb),1015(sdcard_rw),1028(sdcard_r),1078(ext_data_rw),1079(ext_obb_rw),3001(net_bt_admin),3002(net_bt),3003(inet),3006(net_bw_stats),3009(readproc),3011(uhid),3012(readtracefs) context=u:r:shell:s0\nLinux localhost 6.1.157-android14-11-gbd23337e42e7-ab14791245 #1 SMP PREEMPT Wed Jan 28 05:34:14 UTC 2026 aarch64 Toybox\n",
+    "expected": "Shell should execute with appropriate permissions",
+    "interpretation": "Check shell user and permissions",
+    "confidence": "high",
+    "timestamp": "2026-07-24T17:55:28.027701"
+  },
+  {
+    "test": "5.2_filesystem_access",
+    "category": "tasker_api",
+    "hypothesis": "Can access external storage",
+    "code": "ls -la /sdcard/Download/",
+    "result": "total 3308436\n-rw-rw---- 1 u0_a275 media_rw      46973 2026-07-21 15:45 ADB_WiFi_Shizuku_Robusto_v5.prj.xml\n-rw-rw---- 1 u0_a275 media_rw      49312 2026-07-21 18:20 ADB_WiFi_Shizuku_Robusto_v6.prj.xml\ndrwxrws--- 2 u0_a275 media_rw       3452 2026-07-18 19:54 DuckDuckGo\n-rwxrwx--- 1 u0_a275 media_rw  340246835 2026-07-18 21:31 MGC_9.6.080_V40_ENG.apk\ndrwxrws--- 3 u0_a275 media_rw       3452 2026-07-18 21:33 MGC_CRASH_LOG\n-rwxrwx--- 1 u0_a275 media_rw    1654079 2026-07-18 21:57 MiXArchive_B2602262-arm64.apk\n-rwxrwx--- 1 u0_a275 media_rw   10877905 2026-07-18 21:59 MiXPDF_B2607090.apk\n-rwxrwx--- 1 u0_a275 media_rw    8330620 2026-07-18 21:57 MiXplorer_v6.71.2_B26071620.apk\n-rw-rw---- 1 u0_a275 media_rw      16186 2026-07-21 15:21 Shizuku_ADB_WiFi_5555_Java_v4.tsk.xml\n-rw-rw---- 1 u0_a275 media_rw      13780 2026-07-21 15:02 Shizuku_Java_Termux_v3.tsk.xml\ndrwxrws--- 2 u0_a275 media_rw       3452 2026-07-21 03:08 Tailscale\ndrwxrws--- 2 u0_a275 media_rw       3452 2026-07-24 17:08 Telegram\n-rwxrwx--- 1 u0_a275 media_rw       2498 2026-07-21 06:54 aShellYou__20260721065411.txt\n-rwxrwx--- 1 u0_a275 media_rw        703 2026-07-21 07:04 aShellYou__20260721070450.txt\n-rwxrwx--- 1 u0_a275 media_rw       2228 2026-07-21 07:16 aShellYou__20260721071642.txt\n-rwxrwx--- 1 u0_a275 media_rw     170997 2026-07-24 19:43 aShellYou__20260724194300.txt\n-rwxrwx--- 1 u0_a275 media_rw       2847 2026-07-24 19:44 aShellYou__20260724194426.txt\n-rw-rw---- 1 u0_a275 media_rw      18238 2026-07-23 18:29 arctify-0.1.0.zip\n-rwxrwx--- 1 u0_a275 media_rw       7834 2026-07-22 13:59 images.jpg\n",
+    "expected": "Should list files in Download directory",
+    "interpretation": "Check file system accessibility",
+    "confidence": "high",
+    "timestamp": "2026-07-24T17:55:28.662076"
+  },
+  {
+    "test": "5.3_network_access",
+    "category": "tasker_api",
+    "hypothesis": "Network access is available",
+    "code": "curl -s -o /dev/null -w \"%{http_code}\" http://example.com",
+    "result": "sh: curl: inaccessible or not found\nNo curl\n",
+    "expected": "Should return HTTP status code",
+    "interpretation": "Check network connectivity",
+    "confidence": "high",
+    "timestamp": "2026-07-24T17:55:29.377767"
+  },
+  {
+    "test": "5.4_reflection_access",
+    "category": "tasker_api",
+    "hypothesis": "Reflection is available but may be restricted",
+    "code": "\nimport java.lang.reflect.*;\n\npublic class TestReflection {\n    public static void main(String[] args) throws Exception {\n        System.out.println(\"=== Reflection Test ===\");\n        \n        // Test basic reflection\n        Class<?> clazz = Class.forName(\"android.os.Build\");\n        System.out.println(\"Class: \" + clazz.getName());\n        \n        // Test accessing fields\n        Field[] fields = clazz.getDeclaredFields();\n        System.out.println(\"Fields count: \" + fields.length);\n        \n        // Test accessing methods\n        Method[] methods = clazz.getDeclaredMethods();\n        System.out.println(\"Methods count: \" + methods.length);\n        \n        // Test creating instance\n        try {\n            Object instance = clazz.newInstance();\n            System.out.println(\"Instance created: \" + instance.getClass().getName());\n        } catch (Exception e) {\n            System.out.println(\"Instance creation failed: \" + e.getMessage());\n        }\n        \n        System.out.println(\"=== Reflection Test Complete ===\");\n    }\n}\n",
+    "result": "sh: javac: inaccessible or not found\nReflection test failed\n",
+    "expected": "Should access Android classes via reflection",
+    "interpretation": "Check if reflection is allowed",
+    "confidence": "pending",
+    "timestamp": "2026-07-24T17:55:30.342635"
+  },
+  {
+    "test": "6.1_thread_execution",
+    "category": "concurrency",
+    "hypothesis": "Threads work in Java runtime",
+    "code": "\npublic class TestThread {\n    public static void main(String[] args) throws Exception {\n        System.out.println(\"=== Thread Test ===\");\n        \n        // Test basic thread\n        Thread t = new Thread(() -> {\n            System.out.println(\"Thread running: \" + Thread.currentThread().getName());\n        });\n        t.start();\n        t.join(1000);\n        \n        System.out.println(\"Thread completed\");\n        \n        // Test multiple threads\n        for (int i = 0; i < 3; i++) {\n            final int id = i;\n            new Thread(() -> {\n                System.out.println(\"Thread \" + id + \" running\");\n            }).start();\n        }\n        \n        Thread.sleep(500);\n        System.out.println(\"All threads started\");\n        \n        System.out.println(\"=== Thread Test Complete ===\");\n    }\n}\n",
+    "result": "sh: javac: inaccessible or not found\nThread test failed\n",
+    "expected": "Threads should execute concurrently",
+    "interpretation": "Check if threads actually run",
+    "confidence": "pending",
+    "timestamp": "2026-07-24T17:55:31.552663"
+  },
+  {
+    "test": "6.2_executor_service",
+    "category": "concurrency",
+    "hypothesis": "ExecutorService works in Java runtime",
+    "code": "\nimport java.util.concurrent.*;\n\npublic class TestExecutor {\n    public static void main(String[] args) throws Exception {\n        System.out.println(\"=== ExecutorService Test ===\");\n        \n        ExecutorService executor = Executors.newFixedThreadPool(2);\n        \n        for (int i = 0; i < 5; i++) {\n            final int id = i;\n            executor.submit(() -> {\n                System.out.println(\"Task \" + id + \" executed by \" + \n                    Thread.currentThread().getName());\n            });\n        }\n        \n        executor.shutdown();\n        executor.awaitTermination(5, TimeUnit.SECONDS);\n        \n        System.out.println(\"All tasks completed\");\n        \n        System.out.println(\"=== ExecutorService Test Complete ===\");\n    }\n}\n",
+    "result": "sh: javac: inaccessible or not found\nExecutor test failed\n",
+    "expected": "ExecutorService should manage thread pool",
+    "interpretation": "Check if thread pool executes tasks",
+    "confidence": "pending",
+    "timestamp": "2026-07-24T17:55:32.825585"
+  },
+  {
+    "test": "7.1_file_based_state",
+    "category": "shared_state",
+    "hypothesis": "State can be shared via files between executions",
+    "code": "\nimport java.io.*;\nimport java.nio.file.*;\n\npublic class TestSharedState {\n    private static final String STATE_FILE = \"/data/local/tmp/state.txt\";\n    \n    public static void main(String[] args) throws Exception {\n        System.out.println(\"=== Shared State Test ===\");\n        \n        // Try to read existing state\n        int counter = 0;\n        try {\n            String content = new String(Files.readAllBytes(Paths.get(STATE_FILE)));\n            counter = Integer.parseInt(content.trim());\n            System.out.println(\"Read counter: \" + counter);\n        } catch (Exception e) {\n            System.out.println(\"No existing state: \" + e.getMessage());\n        }\n        \n        // Increment counter\n        counter++;\n        System.out.println(\"New counter: \" + counter);\n        \n        // Write state\n        Files.write(Paths.get(STATE_FILE), Integer.toString(counter).getBytes());\n        System.out.println(\"State saved\");\n        \n        System.out.println(\"=== Shared State Test Complete ===\");\n    }\n}\n",
+    "result": "sh: javac: inaccessible or not found\nShared state test failed\n\n---\nsh: javac: inaccessible or not found\nShared state test failed\n\n---\nsh: javac: inaccessible or not found\nShared state test failed\n",
+    "expected": "Counter should increment across executions",
+    "interpretation": "Check if counter persists via file",
+    "confidence": "pending",
+    "timestamp": "2026-07-24T17:55:36.639514"
+  },
+  {
+    "test": "8.1_startup_time",
+    "category": "performance",
+    "hypothesis": "Java runtime has measurable startup time",
+    "code": "java -version",
+    "result": {
+      "times": [
+        0.579193115234375,
+        0.7189702987670898,
+        0.4959902763366699,
+        0.5558440685272217,
+        0.44272565841674805
+      ],
+      "avg": 0.5585446834564209,
+      "min": 0.44272565841674805,
+      "max": 0.7189702987670898
+    },
+    "expected": "Startup should be < 1 second",
+    "interpretation": "Measure Java runtime startup overhead",
+    "confidence": "high",
+    "timestamp": "2026-07-24T17:55:39.432281"
+  },
+  {
+    "test": "8.2_hashmap_performance",
+    "category": "performance",
+    "hypothesis": "HashMap operations have measurable performance",
+    "code": "\nimport java.util.*;\n\npublic class TestHashMapPerf {\n    public static void main(String[] args) throws Exception {\n        System.out.println(\"=== HashMap Performance Test ===\");\n        \n        HashMap<String, Integer> map = new HashMap<>();\n        int count = 10000;\n        \n        // Insert performance\n        long start = System.currentTimeMillis();\n        for (int i = 0; i < count; i++) {\n            map.put(\"key\" + i, i);\n        }\n        long insertTime = System.currentTimeMillis() - start;\n        System.out.println(\"Insert \" + count + \" items: \" + insertTime + \"ms\");\n        \n        // Lookup performance\n        start = System.currentTimeMillis();\n        for (int i = 0; i < count; i++) {\n            map.get(\"key\" + i);\n        }\n        long lookupTime = System.currentTimeMillis() - start;\n        System.out.println(\"Lookup \" + count + \" items: \" + lookupTime + \"ms\");\n        \n        System.out.println(\"=== HashMap Performance Test Complete ===\");\n    }\n}\n",
+    "result": "sh: javac: inaccessible or not found\nHashMap perf test failed\n",
+    "expected": "Insert and lookup should be fast",
+    "interpretation": "Measure HashMap operation times",
+    "confidence": "pending",
+    "timestamp": "2026-07-24T17:55:40.817491"
+  },
+  {
+    "test": "9.1_memory_limits",
+    "category": "limits",
+    "hypothesis": "Java runtime has memory limits",
+    "code": "\npublic class TestMemory {\n    public static void main(String[] args) throws Exception {\n        System.out.println(\"=== Memory Test ===\");\n        \n        Runtime runtime = Runtime.getRuntime();\n        System.out.println(\"Max memory: \" + runtime.maxMemory() / 1024 / 1024 + \" MB\");\n        System.out.println(\"Total memory: \" + runtime.totalMemory() / 1024 / 1024 + \" MB\");\n        System.out.println(\"Free memory: \" + runtime.freeMemory() / 1024 / 1024 + \" MB\");\n        \n        // Try to allocate memory\n        try {\n            byte[] largeArray = new byte[10 * 1024 * 1024]; // 10MB\n            System.out.println(\"Allocated 10MB successfully\");\n            largeArray = null;\n        } catch (OutOfMemoryError e) {\n            System.out.println(\"OutOfMemoryError: \" + e.getMessage());\n        }\n        \n        System.out.println(\"=== Memory Test Complete ===\");\n    }\n}\n",
+    "result": "sh: javac: inaccessible or not found\nMemory test failed\n",
+    "expected": "Should report memory limits and handle OOM",
+    "interpretation": "Check memory allocation behavior",
+    "confidence": "pending",
+    "timestamp": "2026-07-24T17:55:42.217320"
+  },
+  {
+    "test": "9.2_stack_depth",
+    "category": "limits",
+    "hypothesis": "Stack depth is limited",
+    "code": "\npublic class TestStack {\n    static int depth = 0;\n    \n    public static void main(String[] args) throws Exception {\n        System.out.println(\"=== Stack Depth Test ===\");\n        \n        try {\n            recursiveCall();\n        } catch (StackOverflowError e) {\n            System.out.println(\"StackOverflowError at depth: \" + depth);\n        }\n        \n        System.out.println(\"=== Stack Depth Test Complete ===\");\n    }\n    \n    static void recursiveCall() {\n        depth++;\n        recursiveCall();\n    }\n}\n",
+    "result": "sh: javac: inaccessible or not found\nStack test failed\n",
+    "expected": "Should throw StackOverflowError at some depth",
+    "interpretation": "Measure maximum recursion depth",
+    "confidence": "pending",
+    "timestamp": "2026-07-24T17:55:43.377170"
+  },
+  {
+    "test": "10.1_socket_access",
+    "category": "security",
+    "hypothesis": "Socket access may be restricted",
+    "code": "\nimport java.net.*;\nimport java.io.*;\n\npublic class TestSocket {\n    public static void main(String[] args) throws Exception {\n        System.out.println(\"=== Socket Test ===\");\n        \n        try {\n            // Try to create a socket\n            Socket socket = new Socket();\n            System.out.println(\"Socket created\");\n            \n            // Try to connect to a test server\n            socket.connect(new InetSocketAddress(\"example.com\", 80), 5000);\n            System.out.println(\"Connected to example.com:80\");\n            \n            // Send HTTP request\n            OutputStream out = socket.getOutputStream();\n            out.write(\"GET / HTTP/1.1\r\nHost: example.com\r\n\r\n\".getBytes());\n            out.flush();\n            \n            // Read response\n            InputStream in = socket.getInputStream();\n            byte[] buffer = new byte[1024];\n            int bytesRead = in.read(buffer);\n            String response = new String(buffer, 0, bytesRead);\n            System.out.println(\"Response length: \" + response.length());\n            \n            socket.close();\n            System.out.println(\"Socket closed\");\n        } catch (Exception e) {\n            System.out.println(\"Socket error: \" + e.getClass().getName() + \": \" + e.getMessage());\n        }\n        \n        System.out.println(\"=== Socket Test Complete ===\");\n    }\n}\n",
+    "result": "sh: javac: inaccessible or not found\nSocket test failed\n",
+    "expected": "Should either succeed or fail with security exception",
+    "interpretation": "Check if network sockets are allowed",
+    "confidence": "pending",
+    "timestamp": "2026-07-24T17:55:45.177539"
+  },
+  {
+    "test": "10.2_file_access",
+    "category": "security",
+    "hypothesis": "File access is restricted by sandbox",
+    "code": "\nimport java.io.*;\nimport java.nio.file.*;\n\npublic class TestFileAccess {\n    public static void main(String[] args) throws Exception {\n        System.out.println(\"=== File Access Test ===\");\n        \n        // Test reading system files\n        try {\n            String content = new String(Files.readAllBytes(Paths.get(\"/etc/hosts\")));\n            System.out.println(\"Read /etc/hosts: \" + content.length() + \" bytes\");\n        } catch (Exception e) {\n            System.out.println(\"Cannot read /etc/hosts: \" + e.getMessage());\n        }\n        \n        // Test writing to /sdcard\n        try {\n            Files.write(Paths.get(\"/sdcard/Download/test_write.txt\"), \n                \"test content\".getBytes());\n            System.out.println(\"Wrote to /sdcard/Download/test_write.txt\");\n            \n            // Read it back\n            String content = new String(Files.readAllBytes(\n                Paths.get(\"/sdcard/Download/test_write.txt\")));\n            System.out.println(\"Read back: \" + content);\n            \n            // Clean up\n            Files.deleteIfExists(Paths.get(\"/sdcard/Download/test_write.txt\"));\n            System.out.println(\"Cleaned up\");\n        } catch (Exception e) {\n            System.out.println(\"File write error: \" + e.getMessage());\n        }\n        \n        // Test writing to /data\n        try {\n            Files.write(Paths.get(\"/data/local/tmp/test_write.txt\"), \n                \"test content\".getBytes());\n            System.out.println(\"Wrote to /data/local/tmp/test_write.txt\");\n        } catch (Exception e) {\n            System.out.println(\"Cannot write to /data: \" + e.getMessage());\n        }\n        \n        System.out.println(\"=== File Access Test Complete ===\");\n    }\n}\n",
+    "result": "sh: javac: inaccessible or not found\nFile access test failed\n",
+    "expected": "Should have limited file access",
+    "interpretation": "Check file system permissions",
+    "confidence": "pending",
+    "timestamp": "2026-07-24T17:55:46.339609"
+  },
+  {
+    "test": "10.3_process_execution",
+    "category": "security",
+    "hypothesis": "Process execution may be restricted",
+    "code": "\nimport java.lang.ProcessBuilder;\nimport java.io.*;\n\npublic class TestProcess {\n    public static void main(String[] args) throws Exception {\n        System.out.println(\"=== Process Execution Test ===\");\n        \n        try {\n            ProcessBuilder pb = new ProcessBuilder(\"whoami\");\n            Process process = pb.start();\n            \n            BufferedReader reader = new BufferedReader(\n                new InputStreamReader(process.getInputStream()));\n            String line;\n            while ((line = reader.readLine()) != null) {\n                System.out.println(\"Output: \" + line);\n            }\n            \n            int exitCode = process.waitFor();\n            System.out.println(\"Exit code: \" + exitCode);\n        } catch (Exception e) {\n            System.out.println(\"Process error: \" + e.getClass().getName() + \": \" + e.getMessage());\n        }\n        \n        System.out.println(\"=== Process Execution Test Complete ===\");\n    }\n}\n",
+    "result": "sh: javac: inaccessible or not found\nProcess test failed\n",
+    "expected": "Should either succeed or fail with security exception",
+    "interpretation": "Check if process execution is allowed",
+    "confidence": "pending",
+    "timestamp": "2026-07-24T17:55:47.410801"
+  }
+]
