@@ -1,0 +1,40 @@
+id: antennapod.media.play.v1
+capability: media.play
+package: de.danoeh.antennapod
+version: "1.0.0"
+maturity: candidate
+steps:
+  - action: android_open_app
+    params:
+      packageName: de.danoeh.antennapod
+    verifier: screen_transition
+    verifier_params:
+      expected_package: de.danoeh.antennapod
+  - action: android_tap_text
+    params:
+      text: Search
+      exact: false
+  - action: android_type_text
+    params:
+      text: "{query}"
+  - action: android_press_key
+    params:
+      key: ENTER
+  - action: android_tap_text
+    params:
+      text: "{query}"
+      exact: false
+    retries: 1
+  - action: android_tap_text
+    params:
+      text: Play
+      exact: false
+    verifier: media_state
+    verifier_params:
+      expected_title: "{query}"
+verifier:
+  type: media_state
+fingerprint:
+  device: pixel8
+  android_version: "15"
+  sdk_int: 35

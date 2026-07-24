@@ -1,0 +1,45 @@
+id: osmand.place.save.v1
+capability: place.save
+package: net.osmand.plus
+version: "1.0.0"
+maturity: candidate
+steps:
+  - action: android_open_app
+    params:
+      packageName: net.osmand.plus
+    verifier: screen_transition
+    verifier_params:
+      expected_package: net.osmand.plus
+  - action: android_tap_text
+    params:
+      text: Search
+      exact: false
+  - action: android_type_text
+    params:
+      text: "{place_name}"
+  - action: android_press_key
+    params:
+      key: ENTER
+  - action: android_tap_text
+    params:
+      text: "{place_name}"
+      exact: false
+    retries: 1
+  - action: android_tap_text
+    params:
+      text: Add to Favorites
+      exact: false
+    fallback:
+      action: android_tap_text
+      params:
+        text: Save
+        exact: false
+    verifier: favorite_saved
+    verifier_params:
+      place_name: "{place_name}"
+verifier:
+  type: favorite_saved
+fingerprint:
+  device: pixel8
+  android_version: "15"
+  sdk_int: 35
