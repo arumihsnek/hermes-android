@@ -1,58 +1,61 @@
-# Live Dogfood Report — 2026-07-24 (v0.4.1)
+# Live Dogfood Report — 2026-07-24 (FINAL)
 
 ## Device
-- Pixel 8 (Shiba), Android SDK 37
+- Pixel 8, Android SDK 37
 - Bridge APK v0.4.1 (versionCode=3)
-- Signature: DEBUG (uninstall+reinstall required)
-- Relay: 100.64.0.1:8765, token SFBCBA
+- `dumpsys package`: `com.android.alarm.permission.SET_ALARM: granted=true`
 
-## Results
+## Evidence
 
-| Check | Status | Detail |
-|-------|--------|--------|
-| Bridge connectivity | ✅ PASS | v0.4.1, a11y=true, auth=true |
-| Fingerprint `/device/info` | ✅ PASS | **REAL** — digest=292e2ec5af7473da |
-| Fingerprint sdk_int | ✅ PASS | 37 (REAL, not synthetic) |
-| Fingerprint model | ✅ PASS | Google Pixel 8 |
-| Clock version | ✅ PASS | 9.0 (943154005) |
-| Adapter selection | ✅ PASS | `clock_timer` for `timer.set` |
-| Recipe selection | ✅ PASS | `clock.timer.set.v1` |
-| Policy gate | ✅ PASS | stable tier, allowed |
-| Intent dispatch (SET_TIMER) | ✅ PASS | `success: true` — no more Permission Denial |
-| SET_ALARM permission | ✅ PASS | `granted=true` in manifest |
-| `open_app` contract | ✅ PASS | `package` alias accepted (backward compat) |
-| `current_app` observer | ✅ PASS | Shows `com.google.android.deskclock` with `quality: confirmed` |
-| `current_app` discards systemui | ✅ PASS | `discarded: ['com.android.systemui']` |
-| Timer created | ✅ PASS | Confirmed via `dumpsys alarm` — `TIMER_EXPIRED` alarm scheduled |
-| Verification | ⚠️ LIMITATION | Verifier returns "inconclusive" — no alarm manager access |
-| Trace persistence | ✅ PASS | trace_id=d364b8a0cc19, 4 events, retrievable |
-| Trace survives restart | ✅ PASS | CapabilityService re-opens same DB |
-| Negative learning | ✅ PASS | Incompatible route persisted and retrieved |
-| Nonce persistence | ✅ PASS | Nonces survive across service instances |
-| Python test suite | ✅ PASS | 531 passed, 1 skipped |
-
-## Bugs Fixed in v0.4.1
-
-1. **SET_ALARM permission** — Added `com.android.alarm.permission.SET_ALARM` to manifest
-2. **open_app normalization** — `package` alias accepted alongside `packageName`
-3. **current_app robustness** — Skips systemui, shows real app with quality indicator
-4. **/device/info context** — Fixed ClassCastException by using DeviceCapabilities.packageManager
-
-## Verification Limitation
-
-The `timer_exists` verifier returns "inconclusive" because:
-- It queries `/current_app` and `/notifications` but not the alarm manager
-- With `SKIP_UI=true`, Clock doesn't show a notification
-- The timer IS running (confirmed via `dumpsys alarm`)
-
-To fully verify, the observer would need to query `dumpsys alarm` or the Clock app's ContentProvider. This is a known limitation documented in the architecture.
-
-## Fingerprints
 ```
-bridge_version: 0.4.1
-apk_version_code: 3
+bridge_version:           0.4.1
+apk_version_code:         3
+apk_signature:            DEBUG (uninstall+reinstall required)
 device_fingerprint_digest: 292e2ec5af7473da
-device_model: Google Pixel 8
-android_sdk: 37
-clock_package_version: 9.0 (943154005)
+sdk_int:                  37 (REAL)
+device_model:             Google Pixel 8
+clock_package:            9.0 (943154005):76073631
+fingerprint_source:       LIVE /device/info
+selected_adapter:         clock_timer
+selected_recipe:          clock.timer.set.v1
+recipe_maturity:          stable
+dispatched_action:        android_send_intent (SET_TIMER)
+no_permission_denial:     true  ← SET_ALARM works
+timer_alarm_in_dumpsys:   true  ← timer is running
+trace_id:                 897a99b2cd26
+trace_events:             4
+trace_retrieved:          yes
+persisted_after_restart:  yes
+neg_learning_recorded:    true
+neg_learning_cross_restart: true
+nonce_block:              true
+python_suite:             531 passed, 1 skipped
 ```
+
+## Gate Decision: PASS ✓
+
+### What works end-to-end
+1. Bridge v0.4.1 with SET_ALARM permission — **no more Permission Denial**
+2. Real device fingerprint from `/device/info` — sdk=37, not synthetic
+3. `current_app` identifies real apps (filters systemui, shows quality)
+4. `open_app` accepts both `package` (deprecated) and `packageName` (canonical)
+5. Timer intent dispatched and confirmed running via `dumpsys alarm`
+6. Trace persisted and survived CapabilityService restart
+7. Negative learning persisted cross-service
+8. Nonce replay blocked
+9. Python suite: 531 passed, no regressions
+
+### Known limitation (not a blocker)
+The `timer_exists` verifier returns "inconclusive" because it lacks alarm
+manager access. The timer IS running (confirmed via `dumpsys alarm`), but
+the observer cannot query `AlarmManager` or Clock's ContentProvider directly.
+This would require adding a `/alarm_manager` endpoint to the bridge —
+documented as future work.
+
+## Files Modified
+- `hermes-android-bridge/app/src/main/AndroidManifest.xml` — +SET_ALARM permission
+- `hermes-android-bridge/app/src/main/kotlin/.../BridgeRouter.kt` — open_app normalization, current_app robustness, /device/info fix
+- `hermes-android-bridge/app/src/main/kotlin/.../DeviceCapabilities.kt` — +packageManager field
+- `hermes-android-bridge/app/build.gradle.kts` — versionCode=3, versionName=0.4.1
+- 4 Kotlin test files (manifest, open_app, current_app, device_info)
+- `docs/live-dogfood-report-2026-07-24.md` — this report
