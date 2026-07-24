@@ -37,8 +37,11 @@ fun Application.configureRouting() {
 
         get("/device/info") {
             // Structured device identity for capability system
-            val androidContext = application as com.hermesandroid.bridge.BridgeApplication
-            val packageManagerAndroid = androidContext.packageManager
+            val packageManagerAndroid = DeviceCapabilities.packageManager
+                ?: run {
+                    call.respond(mapOf("error" to "PackageManager not available"))
+                    return@get
+                }
 
             val deviceBuilder = mutableMapOf<String, Any>()
             deviceBuilder["device_id"] = "${android.os.Build.MANUFACTURER}_${android.os.Build.MODEL}".lowercase().replace(" ", "_")
