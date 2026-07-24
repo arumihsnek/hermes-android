@@ -1059,7 +1059,16 @@ class _BridgeFlowHandler:
         }
         verifier_cls = verifier_map.get(verifier)
         if verifier_cls:
-            v = verifier_cls(**params) if params else verifier_cls()
+            import inspect
+            sig = inspect.signature(verifier_cls.__init__)
+            # Only pass params that the verifier constructor accepts
+            valid_params = {}
+            for name in sig.parameters:
+                if name == 'self':
+                    continue
+                if name in params:
+                    valid_params[name] = params[name]
+            v = verifier_cls(**valid_params) if valid_params else verifier_cls()
             return v.verify(observer_data)
 
         return VerificationResult(
