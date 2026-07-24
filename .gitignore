@@ -30,3 +30,9 @@ hermes-android-bridge/local.properties
 # Environment
 .env
 *.env.local
+
+# Tasker Gateway secrets — never commit
+*.secret
+*.key
+.env.tasker
+tasker-secret-*.json

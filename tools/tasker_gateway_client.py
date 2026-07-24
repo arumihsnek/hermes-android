@@ -12,7 +12,7 @@ import subprocess
 from typing import Dict, Any, Optional
 
 BRIDGE = "http://100.64.0.1:8765"
-TOKEN = "NeN0FkX-dFLWzcLQltzCKw"
+TOKEN = os.environ.get("BRIDGE_TOKEN", "")
 GATEWAY_DIR = "/sdcard/Tasker/gateway"
 REQUESTS_DIR = f"{GATEWAY_DIR}/requests"
 RESPONSES_DIR = f"{GATEWAY_DIR}/responses"

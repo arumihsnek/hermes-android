@@ -2,7 +2,7 @@
 GATEWAY_DIR="/sdcard/Tasker/gateway"
 REQUESTS_DIR="$GATEWAY_DIR/requests"
 RESPONSES_DIR="$GATEWAY_DIR/responses"
-GW_TOKEN="uHNgVCmJfld_Kx8BfLEjVK5X7I2nF9Be6KidmM3yYc8"
+GW_TOKEN="${TASKER_GW_TOKEN:?Set TASKER_GW_TOKEN env var}"
 LOG_FILE="$GATEWAY_DIR/gateway.log"
 log() { echo "$(date "+%Y-%m-%d %H:%M:%S") [GW] $1" >> "$LOG_FILE"; }
 log "=== started ==="

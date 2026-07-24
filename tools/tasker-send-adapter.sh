@@ -14,7 +14,7 @@ set -euo pipefail
 ADAPTER_FILE="${1:?Usage: $0 <adapter_source> <envelope_json> [bridge_url] [bridge_token]}"
 ENVELOPE="${2:?Missing envelope JSON}"
 BRIDGE_URL="${3:-http://100.64.0.1:8765}"
-BRIDGE_TOKEN="${4:-NeN0FkX-dFLWzcLQltzCKw}"
+BRIDGE_TOKEN="${4:?Set BRIDGE_TOKEN env var}"
 
 # Bridge shell helper
 bridge_shell() {

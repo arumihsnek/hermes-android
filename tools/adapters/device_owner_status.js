@@ -11,7 +11,7 @@
 var envText = tasker.getVariable("par2");
 var env = new org.json.JSONObject(envText);
 var token = env.optString("token", "");
-var expected = "uHNgVCmJfld_Kx8BfLEjVK5X7I2nF9Be6KidmM3yYc8";
+var expected = tasker.getVariable("gw_secret");
 var cmdId = env.optString("command_id", "unknown");
 var capName = env.optString("capability", "unknown");
 var params = env.optJSONObject("params");

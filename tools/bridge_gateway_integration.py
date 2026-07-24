@@ -7,18 +7,19 @@ Client for testing the full flow.
 import json
 import uuid
 import time
+import os
 import subprocess
 from typing import Dict, Any, Optional
 
 # Configuration
 BRIDGE_URL = "http://100.64.0.1:8765"
-BRIDGE_TOKEN = "NeN0FkX-dFLWzcLQltzCKw"
+BRIDGE_TOKEN = os.environ.get("BRIDGE_TOKEN", "")
 GATEWAY_DIR = "/sdcard/Tasker/gateway"
 REQUESTS_DIR = f"{GATEWAY_DIR}/requests"
 RESPONSES_DIR = f"{GATEWAY_DIR}/responses"
 TASKER_RECEIVER = "net.dinglisch.android.taskerm/.ReceiverStaticRunTasks"
 TASK_NAME = "Hermes_Command_Gateway"
-LOCAL_SECRET = "uHNgVCmJfld_Kx8BfLEjVK5X7I2nF9Be6KidmM3yYc8"
+LOCAL_SECRET = os.environ.get("TASKER_GW_TOKEN", "")
 
 
 class HermesBridge:

@@ -9,7 +9,7 @@
         "capability": "device_owner.status",
         "params": {},
         "timeout_ms": 10000,
-        "token": "uHNgVCmJfld_Kx8BfLEjVK5X7I2nF9Be6KidmM3yYc8"
+        "token": "REDACTED — rotated in commit 8750d78"
       },
       "response": {
         "version": 1,
@@ -67,7 +67,7 @@
         "capability": "unknown.capability",
         "params": {},
         "timeout_ms": 10000,
-        "token": "uHNgVCmJfld_Kx8BfLEjVK5X7I2nF9Be6KidmM3yYc8"
+        "token": "REDACTED — rotated in commit 8750d78"
       },
       "response": {
         "version": 1,
@@ -103,7 +103,7 @@
         "capability": "device_owner.status",
         "params": {},
         "timeout_ms": 1000,
-        "token": "uHNgVCmJfld_Kx8BfLEjVK5X7I2nF9Be6KidmM3yYc8"
+        "token": "REDACTED — rotated in commit 8750d78"
       },
       "response": null,
       "duration_ms": 2000,
