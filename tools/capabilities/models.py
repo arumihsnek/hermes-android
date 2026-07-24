@@ -83,14 +83,60 @@ class DeviceFingerprint:
     device_id: str
     android_version: str
     sdk_int: int
+    manufacturer: str = ""
+    model: str = ""
     package_fingerprints: dict[str, str] = field(default_factory=dict)
 
     def digest(self) -> str:
-        """Stable digest for authorization binding."""
+        """Stable digest for authorization binding.
+
+        Includes device_id, android_version, sdk_int, and sorted package
+        fingerprints.  Package fingerprints encode versionName:versionCode
+        so that any app update changes the digest deterministically.
+        """
         raw = f"{self.device_id}:{self.android_version}:{self.sdk_int}"
         for pkg in sorted(self.package_fingerprints):
             raw += f":{pkg}={self.package_fingerprints[pkg]}"
         return hashlib.sha256(raw.encode()).hexdigest()[:16]
+
+    @classmethod
+    def from_bridge_response(cls, data: dict) -> "DeviceFingerprint":
+        """Parse a /device/info bridge response into a DeviceFingerprint.
+
+        Raises ValueError if required fields are missing or sdk_int is 0.
+        """
+        required = ("device_id", "android_version", "sdk_int")
+        missing = [f for f in required if f not in data]
+        if missing:
+            raise ValueError(f"Missing required field(s): {', '.join(missing)}")
+
+        sdk_int = data["sdk_int"]
+        if not isinstance(sdk_int, int) or sdk_int <= 0:
+            raise ValueError(f"sdk_int must be a positive integer, got {sdk_int}")
+
+        device_id = data["device_id"]
+        if device_id == "unknown" or not device_id:
+            raise ValueError("device_id must be a real device identifier, not 'unknown'")
+
+        android_version = data["android_version"]
+        if android_version == "unknown" or not android_version:
+            raise ValueError("android_version must be a real version string")
+
+        # Build package fingerprints: {package: "versionName:versionCode"}
+        package_fingerprints: dict[str, str] = {}
+        for pkg_name, pkg_data in data.get("packages", {}).items():
+            vname = pkg_data.get("versionName", "")
+            vcode = pkg_data.get("versionCode", 0)
+            package_fingerprints[pkg_name] = f"{vname}:{vcode}"
+
+        return cls(
+            device_id=device_id,
+            android_version=android_version,
+            sdk_int=sdk_int,
+            manufacturer=data.get("manufacturer", ""),
+            model=data.get("model", ""),
+            package_fingerprints=package_fingerprints,
+        )
 
 
 # ── Execution Authorization ──────────────────────────────────────────────────

@@ -184,7 +184,7 @@ class TestDeviceFingerprint:
         assert fp.sdk_int == 35
 
     def test_fingerprint_digest_deterministic(self):
-        fp = DeviceFingerprint("pixel8", "15", 35, {"com.a": "v1"})
+        fp = DeviceFingerprint("pixel8", "15", 35, package_fingerprints={"com.a": "v1"})
         assert fp.digest() == fp.digest()
 
     def test_fingerprint_digest_changes(self):
@@ -227,7 +227,7 @@ class TestAdapter:
             package="com.example", min_sdk=21,
             required_packages=["com.helper"],
         )
-        fp = DeviceFingerprint("pixel8", "15", 35, {"com.helper": "v1"})
+        fp = DeviceFingerprint("pixel8", "15", 35, package_fingerprints={"com.helper": "v1"})
         assert adapter.matches_fingerprint(fp)
 
     def test_adapter_fingerprint_no_match(self):
@@ -236,7 +236,7 @@ class TestAdapter:
             package="com.example", min_sdk=21,
             required_packages=["com.missing"],
         )
-        fp = DeviceFingerprint("pixel8", "15", 35, {})
+        fp = DeviceFingerprint("pixel8", "15", 35, package_fingerprints={})
         assert not adapter.matches_fingerprint(fp)
 
 
@@ -271,6 +271,6 @@ class TestAdapterRegistry:
             name="specific", capability="timer.set",
             package="com.specific", min_sdk=21,
         ))
-        fp = DeviceFingerprint("pixel8", "15", 35, {"com.specific": "v1"})
+        fp = DeviceFingerprint("pixel8", "15", 35, package_fingerprints={"com.specific": "v1"})
         selected = registry.select("timer.set", fp, package="com.specific")
         assert selected.name == "specific"

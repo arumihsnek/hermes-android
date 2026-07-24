@@ -23,7 +23,7 @@ from tools.capabilities.models import (
 
 class TestDeviceFingerprint:
     def test_digest_is_stable(self):
-        fp = DeviceFingerprint("pixel8", "15", 35, {"com.app": "v1"})
+        fp = DeviceFingerprint("pixel8", "15", 35, package_fingerprints={"com.app": "v1"})
         assert fp.digest() == fp.digest()
 
     def test_digest_changes_with_device_id(self):
@@ -32,12 +32,12 @@ class TestDeviceFingerprint:
         assert fp1.digest() != fp2.digest()
 
     def test_digest_changes_with_packages(self):
-        fp1 = DeviceFingerprint("pixel8", "15", 35, {"com.app": "v1"})
-        fp2 = DeviceFingerprint("pixel8", "15", 35, {"com.app": "v2"})
+        fp1 = DeviceFingerprint("pixel8", "15", 35, package_fingerprints={"com.app": "v1"})
+        fp2 = DeviceFingerprint("pixel8", "15", 35, package_fingerprints={"com.app": "v2"})
         assert fp1.digest() != fp2.digest()
 
     def test_digest_is_deterministic(self):
-        fp = DeviceFingerprint("pixel8", "15", 35, {"com.a": "v1", "com.b": "v2"})
+        fp = DeviceFingerprint("pixel8", "15", 35, package_fingerprints={"com.a": "v1", "com.b": "v2"})
         d1 = fp.digest()
         d2 = fp.digest()
         assert d1 == d2
