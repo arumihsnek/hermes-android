@@ -106,6 +106,15 @@ fun Application.configureRouting() {
             call.respond(result)
         }
 
+        post("/tap_res_id") {
+            data class TapResIdRequest(val resId: String)
+            val req = call.receive<TapResIdRequest>()
+            val result = withContext(Dispatchers.Main) {
+                ActionExecutor.tapByResId(req.resId)
+            }
+            call.respond(result)
+        }
+
         post("/type") {
             data class TypeRequest(val text: String, val clearFirst: Boolean = false)
             val req = call.receive<TypeRequest>()
