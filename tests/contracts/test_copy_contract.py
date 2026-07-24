@@ -83,9 +83,6 @@ class TestCopyContract:
             assert route in tools_content, f"Route {route} missing from tools/android_relay.py"
             assert route in plugin_content, f"Route {route} missing from hermes-android-plugin/android_relay.py"
 
-        # tools/ may have additional routes not yet synced to plugin/
-        # This is tracked but not a hard failure — the contract test catches drift
-
     def test_capability_package_exists(self):
         """Capability system package must exist."""
         cap_dir = os.path.join(TOOLS_DIR, "capabilities")
