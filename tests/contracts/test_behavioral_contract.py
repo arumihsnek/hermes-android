@@ -179,6 +179,83 @@ class TestErrorParity:
         )
 
 
+class TestCapabilityFlow:
+    """Verify CapabilityService produces correct result shapes (tools-only)."""
+
+    def test_flow_simple_success(self):
+        """Simple flow with confirmed verifier returns success with trace."""
+        from tools.capabilities.service import CapabilityService
+        from tools.capabilities.models import VerificationResult, VerificationOutcome
+
+        from tools.capabilities.models import EvidenceReference
+
+        class FakeHandler:
+            def execute(self, action, params):
+                return {"success": True}
+            def verify(self, verifier, params):
+                return VerificationResult(
+                    outcome=VerificationOutcome.CONFIRMED,
+                    verifier_type="screen_hash",
+                    evidence_ref=EvidenceReference(
+                        evidence_id="ev_test_001",
+                        observer_type="hash",
+                        timestamp=1784853566.535857,
+                        safe_summary="screen hash matched",
+                    ),
+                )
+
+        service = CapabilityService(FakeHandler())
+        steps = [{"action": "android_tap", "params": {"x": 100, "y": 200}, "verifier": "screen_changed"}]
+        result = json.loads(service.execute_flow(steps, capability="tap"))
+
+        assert result["status"] == "success"
+        assert "trace_id" in result
+        assert len(result["evidence_refs"]) > 0
+
+    def test_flow_verification_failed(self):
+        """Flow with inconclusive verifier returns failure."""
+        from tools.capabilities.service import CapabilityService
+        from tools.capabilities.models import VerificationResult, VerificationOutcome
+
+        class FakeHandler:
+            def execute(self, action, params):
+                return {"success": True}
+            def verify(self, verifier, params):
+                return VerificationResult(
+                    outcome=VerificationOutcome.INCONCLUSIVE,
+                    verifier_type="screen_hash",
+                )
+
+        service = CapabilityService(FakeHandler())
+        steps = [{"action": "android_tap", "params": {"x": 100, "y": 200}, "verifier": "screen_changed"}]
+        result = json.loads(service.execute_flow(steps, capability="tap"))
+
+        assert result["status"] == "failure"
+        assert "failure_class" in result
+
+
+class TestPolicyClassification:
+    """Verify PolicyGate classifies actions correctly."""
+
+    def test_reversible_action(self):
+        from tools.capabilities.policy import classify_action
+        from tools.capabilities.models import ActionClassification
+        result = classify_action("android_tap")
+        assert result == ActionClassification.ORDINARY_REVERSIBLE
+
+    def test_confirmation_required_action(self):
+        from tools.capabilities.policy import classify_action
+        from tools.capabilities.models import ActionClassification
+        result = classify_action("message.send")
+        assert result == ActionClassification.CONFIRMATION_REQUIRED
+
+    def test_prohibited_action(self):
+        from tools.capabilities.policy import classify_action
+        from tools.capabilities.models import ActionClassification
+        result = classify_action("factory_reset")
+        assert result == ActionClassification.PROHIBITED
+
+
 class TestToolFunctionParity:
     """Verify both copies expose identical tool function sets."""
 

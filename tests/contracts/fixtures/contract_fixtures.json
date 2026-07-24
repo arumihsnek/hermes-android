@@ -344,11 +344,11 @@
     {
       "name": "reversible_action",
       "action": "android_tap",
-      "expected_classification": "reversible"
+      "expected_classification": "ordinary_reversible"
     },
     {
       "name": "confirmation_required_action",
-      "action": "message_send",
+      "action": "message.send",
       "expected_classification": "confirmation_required"
     },
     {
