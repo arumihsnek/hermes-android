@@ -1,27 +1,30 @@
 id: clock.timer.set.v1
 capability: timer.set
 package: com.google.android.deskclock
-version: "1.0.0"
+version: "2.0.0"
 maturity: candidate
 steps:
-  - action: android_open_app
+  - action: android_send_intent
     params:
-      packageName: com.google.android.deskclock
-    verifier: screen_transition
-    verifier_params:
-      expected_package: com.google.android.deskclock
-  - action: android_tap_text
-    params:
-      text: Timer
-      exact: false
-    retries: 1
-  - action: android_tap_text
-    params:
-      text: "Start"
-      exact: true
+      action: android.intent.action.SET_TIMER
+      extras:
+        android.intent.extra.alarm.LENGTH: 60
+        android.intent.extra.alarm.MESSAGE: "Timer"
+        android.intent.extra.alarm.SKIP_UI: true
     verifier: timer_exists
     verifier_params:
       duration_seconds: 60
+    fallback:
+      action: android_broadcast
+      params:
+        action: android.intent.action.SET_TIMER
+        extras:
+          android.intent.extra.alarm.LENGTH: 60
+          android.intent.extra.alarm.MESSAGE: "Timer"
+          android.intent.extra.alarm.SKIP_UI: true
+      verifier: timer_exists
+      verifier_params:
+        duration_seconds: 60
 verifier:
   type: timer_exists
 fingerprint:
@@ -30,4 +33,12 @@ fingerprint:
   sdk_int: 35
 invalidation_conditions:
   - app_version_change
-  - ui_layout_change
+  - permission_revoked
+permissions_required:
+  - com.android.alarm.permission.SET_ALARM
+notes: |
+  Uses standard android.provider.AlarmClock API (SET_TIMER intent).
+  Bridge manifest must declare: <uses-permission android:name="com.android.alarm.permission.SET_ALARM"/>
+  Primary: /intent endpoint (explicit intent to HandleSetApiCalls).
+  Fallback: /broadcast endpoint (less reliable, Clock may ignore broadcasts).
+  UI fallback exists in adapter but is not used by default (timer buttons don't respond to accessibility clicks).
