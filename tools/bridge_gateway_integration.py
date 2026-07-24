@@ -12,13 +12,13 @@ from typing import Dict, Any, Optional
 
 # Configuration
 BRIDGE_URL = "http://100.64.0.1:8765"
-BRIDGE_TOKEN = "REDACTED_BRIDGE_TOKEN_ROTATED"
+BRIDGE_TOKEN = "NeN0FkX-dFLWzcLQltzCKw"
 GATEWAY_DIR = "/sdcard/Tasker/gateway"
 REQUESTS_DIR = f"{GATEWAY_DIR}/requests"
 RESPONSES_DIR = f"{GATEWAY_DIR}/responses"
 TASKER_RECEIVER = "net.dinglisch.android.taskerm/.ReceiverStaticRunTasks"
 TASK_NAME = "Hermes_Command_Gateway"
-LOCAL_SECRET = "REDACTED_GW_TOKEN_ROTATED"
+LOCAL_SECRET = "uHNgVCmJfld_Kx8BfLEjVK5X7I2nF9Be6KidmM3yYc8"
 
 
 class HermesBridge:

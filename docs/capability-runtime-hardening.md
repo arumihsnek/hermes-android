@@ -138,7 +138,7 @@ This document describes the six-block hardening of the `hermes-android` capabili
 1. **Live dogfood**: BLOCKED — phone not connected to relay. Test script prepared at
    `tests/capabilities/test_live_dogfood.py`. Execute when phone connects with:
    ```
-   ANDROID_BRIDGE_URL="http://localhost:18766" ANDROID_BRIDGE_TOKEN="REDACTED_BRIDGE_TOKEN_ROTATED" \
+   ANDROID_BRIDGE_URL="http://localhost:18766" ANDROID_BRIDGE_TOKEN="NeN0FkX-dFLWzcLQltzCKw" \
      python3 tests/capabilities/test_live_dogfood.py
    ```
 2. **`/device/info` endpoint**: Added to Kotlin `BridgeRouter.kt` but NOT yet deployed.

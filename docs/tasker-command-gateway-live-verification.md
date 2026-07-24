@@ -42,7 +42,7 @@ Device Owner:
   "capability": "device_owner.status",
   "params": {},
   "timeout_ms": 10000,
-  "token": "REDACTED_GW_TOKEN_ROTATED"
+  "token": "uHNgVCmJfld_Kx8BfLEjVK5X7I2nF9Be6KidmM3yYc8"
 }
 ```
 
@@ -120,7 +120,7 @@ Device Owner:
   "capability": "unknown.capability",
   "params": {},
   "timeout_ms": 10000,
-  "token": "REDACTED_GW_TOKEN_ROTATED"
+  "token": "uHNgVCmJfld_Kx8BfLEjVK5X7I2nF9Be6KidmM3yYc8"
 }
 ```
 
@@ -170,7 +170,7 @@ THIS IS NOT VALID JSON {{{
   "capability": "device_owner.status",
   "params": {},
   "timeout_ms": 1000,
-  "token": "REDACTED_GW_TOKEN_ROTATED"
+  "token": "uHNgVCmJfld_Kx8BfLEjVK5X7I2nF9Be6KidmM3yYc8"
 }
 ```
 
@@ -212,7 +212,7 @@ THIS IS NOT VALID JSON {{{
 ### 1. Valid Call
 ```bash
 # Create request
-echo '{"version":1,"command_id":"test-001","capability":"device_owner.status","params":{},"timeout_ms":10000,"token":"REDACTED_GW_TOKEN_ROTATED"}' > /sdcard/Tasker/gateway/requests/test-001.json
+echo '{"version":1,"command_id":"test-001","capability":"device_owner.status","params":{},"timeout_ms":10000,"token":"uHNgVCmJfld_Kx8BfLEjVK5X7I2nF9Be6KidmM3yYc8"}' > /sdcard/Tasker/gateway/requests/test-001.json
 
 # Execute gateway
 sh /sdcard/Tasker/gateway/hermes_gateway.sh
@@ -230,7 +230,7 @@ cat /sdcard/Tasker/gateway/responses/test-002.json
 
 ### 3. Unknown Capability
 ```bash
-echo '{"version":1,"command_id":"test-003","capability":"unknown.cap","params":{},"timeout_ms":10000,"token":"REDACTED_GW_TOKEN_ROTATED"}' > /sdcard/Tasker/gateway/requests/test-003.json
+echo '{"version":1,"command_id":"test-003","capability":"unknown.cap","params":{},"timeout_ms":10000,"token":"uHNgVCmJfld_Kx8BfLEjVK5X7I2nF9Be6KidmM3yYc8"}' > /sdcard/Tasker/gateway/requests/test-003.json
 sh /sdcard/Tasker/gateway/hermes_gateway.sh
 cat /sdcard/Tasker/gateway/responses/test-003.json
 ```
@@ -245,7 +245,7 @@ sh /sdcard/Tasker/gateway/hermes_gateway.sh
 ### 5. Timeout
 ```bash
 # Write request but do NOT execute gateway
-echo '{"version":1,"command_id":"test-005","capability":"device_owner.status","params":{},"timeout_ms":1000,"token":"REDACTED_GW_TOKEN_ROTATED"}' > /sdcard/Tasker/gateway/requests/test-005.json
+echo '{"version":1,"command_id":"test-005","capability":"device_owner.status","params":{},"timeout_ms":1000,"token":"uHNgVCmJfld_Kx8BfLEjVK5X7I2nF9Be6KidmM3yYc8"}' > /sdcard/Tasker/gateway/requests/test-005.json
 # Wait 2 seconds
 sleep 2
 ls /sdcard/Tasker/gateway/responses/test-005.json 2>/dev/null || echo "No response (timeout)"

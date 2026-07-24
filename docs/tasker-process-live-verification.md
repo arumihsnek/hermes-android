@@ -85,7 +85,7 @@ Response returned to caller
 var envText = tasker.getVariable("par2");
 var env = new org.json.JSONObject(envText);
 var token = env.optString("token", "");
-var expected = "REDACTED_GW_TOKEN_ROTATED";
+var expected = "uHNgVCmJfld_Kx8BfLEjVK5X7I2nF9Be6KidmM3yYc8";
 var cmdId = env.optString("command_id", "unknown");
 var capName = env.optString("capability", "unknown");
 

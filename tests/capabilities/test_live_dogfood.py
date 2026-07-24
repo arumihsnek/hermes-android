@@ -9,7 +9,7 @@ Prerequisites:
 
 Run:
   cd ~/code/hermes-android
-  ANDROID_BRIDGE_URL="http://localhost:18766" ANDROID_BRIDGE_TOKEN="REDACTED_BRIDGE_TOKEN_ROTATED" \
+  ANDROID_BRIDGE_URL="http://localhost:18766" ANDROID_BRIDGE_TOKEN="NeN0FkX-dFLWzcLQltzCKw" \
     python3 tests/capabilities/test_live_dogfood.py
 """
 import sys
