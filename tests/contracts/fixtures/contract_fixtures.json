@@ -309,7 +309,7 @@
       "expected_status": "success",
       "required_keys": [
         "status",
-        "trace"
+        "trace_id"
       ]
     },
     {
