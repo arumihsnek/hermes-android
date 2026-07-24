@@ -6,7 +6,8 @@ on:
     paths:
       - 'tools/**'
       - 'hermes-android-plugin/**'
-      - 'tests/contracts/**'
+      - 'tests/**'
+      - 'recipes/**'
       - 'scripts/**'
       - '.github/workflows/ci.yml'
   pull_request:
@@ -14,7 +15,8 @@ on:
     paths:
       - 'tools/**'
       - 'hermes-android-plugin/**'
-      - 'tests/contracts/**'
+      - 'tests/**'
+      - 'recipes/**'
       - 'scripts/**'
       - '.github/workflows/ci.yml'
 
@@ -24,7 +26,6 @@ permissions:
 jobs:
   contract-tests:
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v6
 
@@ -36,12 +37,73 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install pytest responses
+          pip install pytest responses pyyaml
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
           pip install -e . 2>/dev/null || true
 
+      - name: Validate action contracts
+        run: |
+          python3 -c "
+          from tools.capabilities.action_contract import ACTION_CATALOG, validate_action
+          from tools.capabilities.action_contract import validate_flow_actions
+          import yaml, os
+
+          # Validate all catalog entries
+          for name, entry in ACTION_CATALOG.items():
+              assert 'bridge_endpoint' in entry, f'{name} missing endpoint'
+              assert 'category' in entry, f'{name} missing category'
+              assert entry['category'] in ('executable', 'semantic', 'verifier')
+
+          # Validate all recipe actions
+          for fname in sorted(os.listdir('recipes')):
+              if not fname.endswith('.yaml'):
+                  continue
+              with open(f'recipes/{fname}') as f:
+                  recipe = yaml.safe_load(f)
+              for step in recipe.get('steps', []):
+                  errors = validate_action(step['action'])
+                  assert not errors, f'{fname}: {errors}'
+                  if 'fallback' in step:
+                      errors = validate_action(step['fallback']['action'])
+                      assert not errors, f'{fname} fallback: {errors}'
+
+          print('Action contract validation: PASS')
+          "
+
+      - name: Validate device fingerprint schema
+        run: |
+          python3 -c "
+          from tools.capabilities.models import DeviceFingerprint
+          fp = DeviceFingerprint('test', '15', 35, package_fingerprints={'com.test': 'v1:1'})
+          d = fp.digest()
+          assert len(d) == 16, f'Digest length wrong: {len(d)}'
+          print(f'Device fingerprint schema: PASS (digest={d})')
+          "
+
+      - name: Validate persistence schema
+        run: |
+          python3 -c "
+          from tools.capabilities.persistence import CapabilityStateStore
+          import tempfile, os
+          with tempfile.NamedTemporaryFile(suffix='.db', delete=False) as f:
+              db = f.name
+          try:
+              store = CapabilityStateStore(db)
+              assert store.schema_version() >= 1
+              store.close()
+              print('Persistence schema: PASS')
+          finally:
+              os.unlink(db)
+          "
+
       - name: Run contract tests
         run: python3 -m pytest tests/contracts/ -v --tb=short
+
+      - name: Run action contract tests
+        run: python3 -m pytest tests/capabilities/test_action_contract.py -v --tb=short
+
+      - name: Run capability tests
+        run: python3 -m pytest tests/capabilities/ -v --tb=short
 
       - name: Run copy contract check script
         run: python3 scripts/check_android_copy_contract.py --check
