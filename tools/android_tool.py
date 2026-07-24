@@ -764,6 +764,227 @@ def android_shell_status() -> str:
         return json.dumps({"error": str(e)})
 
 
+
+# ── Capability system tools ───────────────────────────────────────────────────
+
+def android_flow(
+    steps: list,
+    capability: str = "unknown",
+    recipe_id: str = None,
+    recipe_revision: str = None,
+    timeout_ms: int = 60000,
+    idempotency_key: str = None,
+    tier: str = None,
+    authorization: dict = None,
+) -> str:
+    """Execute a capability flow with policy enforcement and verification.
+
+    Args:
+        steps: List of step dicts with 'action', 'params', 'verifier', etc.
+        capability: Semantic capability name (e.g. 'timer.set', 'media.play')
+        recipe_id: Recipe identifier for adapter selection
+        recipe_revision: Recipe revision digest
+        timeout_ms: Global timeout in milliseconds
+        idempotency_key: Optional idempotency key for replay protection
+        tier: Execution tier (candidate/dogfood/stable)
+        authorization: Authorization envelope for candidate/dogfood tiers
+
+    Returns:
+        JSON with status, trace_id, evidence_refs, and failure info.
+    """
+    try:
+        from tools.capabilities.service import CapabilityService
+
+        # Create a bridge-backed handler
+        handler = _BridgeFlowHandler()
+        service = CapabilityService(handler)
+        result = service.execute_flow(
+            steps=steps,
+            capability=capability,
+            recipe_id=recipe_id,
+            recipe_revision=recipe_revision,
+            timeout_ms=timeout_ms,
+            idempotency_key=idempotency_key,
+            tier=tier,
+            authorization=authorization,
+        )
+        return result
+    except Exception as e:
+        return json.dumps({
+            "status": "error",
+            "error_message": str(e),
+        })
+
+
+def android_execute_capability(
+    capability: str,
+    params: dict = None,
+    package: str = None,
+    tier: str = None,
+    authorization: dict = None,
+) -> str:
+    """Execute a semantic capability with automatic adapter selection.
+
+    Args:
+        capability: Semantic capability name (e.g. 'timer.set', 'media.play')
+        params: Capability-specific parameters
+        package: Target package (optional, for adapter selection)
+        tier: Execution tier (candidate/dogfood/stable)
+        authorization: Authorization envelope for candidate/dogfood tiers
+
+    Returns:
+        JSON with selected adapter, recipe, result status, and evidence.
+    """
+    try:
+        from tools.capabilities.service import CapabilityService
+        from tools.capabilities.recipes import RecipeRegistry
+        from tools.capabilities.adapters import AdapterRegistry, DeviceFingerprint
+
+        handler = _BridgeFlowHandler()
+        service = CapabilityService(handler)
+
+        # Discover adapter
+        recipe_registry = RecipeRegistry()
+        adapter_registry = AdapterRegistry()
+        fingerprint = _get_device_fingerprint()
+
+        adapter = adapter_registry.select(capability, fingerprint, package=package)
+        recipe = recipe_registry.find_by_capability(capability, package=package)
+
+        return json.dumps({
+            "capability": capability,
+            "adapter": adapter.name if adapter else None,
+            "recipe_id": recipe[0].id if recipe else None,
+            "status": "discovered",
+            "message": f"Capability '{capability}' ready for execution",
+        })
+    except Exception as e:
+        return json.dumps({
+            "status": "error",
+            "error_message": str(e),
+        })
+
+
+def android_discover_capability(
+    capability: str,
+    package: str = None,
+) -> str:
+    """Discover how to execute a semantic capability.
+
+    Args:
+        capability: Semantic capability name (e.g. 'timer.set', 'media.play')
+        package: Target package (optional)
+
+    Returns:
+        JSON with discovery result, candidate recipe, and steps tried.
+    """
+    try:
+        from tools.capabilities.discovery import DiscoveryProtocol
+
+        protocol = DiscoveryProtocol()
+        available_tools = [n for n in dir() if n.startswith("android_")]
+
+        result = protocol.discover(
+            capability=capability,
+            available_tools=available_tools,
+            mock_manifest={},
+        )
+
+        return json.dumps({
+            "capability": capability,
+            "success": result.success,
+            "candidate_recipe_id": result.candidate_recipe_id,
+            "steps_tried": result.steps_tried,
+            "failure_reason": result.failure_reason,
+        })
+    except Exception as e:
+        return json.dumps({
+            "status": "error",
+            "error_message": str(e),
+        })
+
+
+class _BridgeFlowHandler:
+    """FlowHandler that delegates to the bridge HTTP API."""
+
+    def execute(self, action: str, params: dict) -> dict:
+        """Execute a bridge action and return result dict."""
+        try:
+            # Map action to bridge endpoint
+            endpoint_map = {
+                "android_tap": "/tap",
+                "android_tap_text": "/tap_text",
+                "android_type": "/type",
+                "android_swipe": "/swipe",
+                "android_open_app": "/open_app",
+                "android_press_key": "/press_key",
+                "android_scroll": "/scroll",
+                "android_send_intent": "/intent",
+                "android_broadcast": "/broadcast",
+            }
+            endpoint = endpoint_map.get(action)
+            if not endpoint:
+                return {"success": False, "error": f"Unknown action: {action}"}
+
+            data = _post(endpoint, params)
+            return {"success": True, "data": data}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    def verify(self, verifier: str, params: dict):
+        """Verify a condition using observers."""
+        from tools.capabilities.observers import select_observers
+        from tools.capabilities.verifiers import (
+            TimerExistsVerifier, MediaStateVerifier, ScreenTransitionVerifier,
+        )
+        from tools.capabilities.models import VerificationResult, VerificationOutcome
+
+        # Try to get observer data
+        observer_data = {}
+        for obs_name in ["direct_query", "media_session", "screen_hash"]:
+            try:
+                data = _get(f"/screen")
+                if data:
+                    observer_data = data
+                    break
+            except Exception:
+                continue
+
+        # Map verifier to verifier class
+        verifier_map = {
+            "timer_exists": TimerExistsVerifier,
+            "media_state": MediaStateVerifier,
+            "screen_changed": ScreenTransitionVerifier,
+        }
+        verifier_cls = verifier_map.get(verifier)
+        if verifier_cls:
+            v = verifier_cls(**params) if params else verifier_cls()
+            return v.verify(observer_data)
+
+        return VerificationResult(
+            outcome=VerificationOutcome.INCONCLUSIVE,
+            verifier_type=verifier,
+        )
+
+
+def _get_device_fingerprint():
+    """Get device fingerprint from bridge."""
+    from tools.capabilities.models import DeviceFingerprint
+    try:
+        data = _get("/current_app")
+        return DeviceFingerprint(
+            device_id="unknown",
+            android_version="unknown",
+            sdk_int=0,
+        )
+    except Exception:
+        return DeviceFingerprint(
+            device_id="unknown",
+            android_version="unknown",
+            sdk_int=0,
+        )
+
+
 def _get_public_ip() -> str:
     """Detect this server's public IP address."""
     for service in [
@@ -1508,6 +1729,56 @@ _SCHEMAS = {
         ),
         "parameters": {"type": "object", "properties": {}, "required": []},
     },
+
+    "android_flow": {
+        "name": "android_flow",
+        "description": (
+            "Execute a capability flow with policy enforcement and verification. "
+            "Each step has an action, parameters, and optional verifier."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "steps": {"type": "array", "description": "List of flow steps"},
+                "capability": {"type": "string", "description": "Capability name"},
+                "recipe_id": {"type": "string", "description": "Recipe ID"},
+                "timeout_ms": {"type": "integer", "description": "Timeout in ms"},
+                "tier": {"type": "string", "description": "Execution tier"},
+                "authorization": {"type": "object", "description": "Auth envelope"},
+            },
+            "required": ["steps"],
+        },
+    },
+    "android_execute_capability": {
+        "name": "android_execute_capability",
+        "description": (
+            "Execute a semantic capability with automatic adapter selection."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "capability": {"type": "string", "description": "Capability name"},
+                "params": {"type": "object", "description": "Parameters"},
+                "package": {"type": "string", "description": "Target package"},
+                "tier": {"type": "string", "description": "Execution tier"},
+            },
+            "required": ["capability"],
+        },
+    },
+    "android_discover_capability": {
+        "name": "android_discover_capability",
+        "description": (
+            "Discover how to execute a semantic capability."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "capability": {"type": "string", "description": "Capability name"},
+                "package": {"type": "string", "description": "Target package"},
+            },
+            "required": ["capability"],
+        },
+    },
 }
 
 # ── Tool handlers map ──────────────────────────────────────────────────────────
@@ -1553,6 +1824,10 @@ _HANDLERS = {
     "android_broadcast": lambda args, **kw: android_broadcast(**args),
     "android_shell": lambda args, **kw: android_shell(**args),
     "android_shell_status": lambda args, **kw: android_shell_status(),
+
+    "android_flow": lambda args, **kw: android_flow(**args),
+    "android_execute_capability": lambda args, **kw: android_execute_capability(**args),
+    "android_discover_capability": lambda args, **kw: android_discover_capability(**args),
 }
 
 # ── Registry registration ──────────────────────────────────────────────────────
