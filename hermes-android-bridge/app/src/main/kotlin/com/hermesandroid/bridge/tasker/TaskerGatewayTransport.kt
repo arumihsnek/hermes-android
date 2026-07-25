@@ -4,6 +4,9 @@ import android.content.Context
 import android.content.Intent
 import android.util.Log
 
+/** Intent flag for API 34+ implicit broadcast export. */
+private const val FLAG_RECEIVER_EXPORTED = 0x01000000
+
 /**
  * Native broadcast transport to Tasker.
  *
@@ -29,7 +32,7 @@ object TaskerGatewayTransport {
             val intent = Intent(TaskerGatewayConfig.ACTION_REQUEST).apply {
                 setPackage(TaskerGatewayConfig.taskerPackage)
                 putExtra(TaskerGatewayConfig.EXTRA_REQUEST_JSON, requestJson)
-                addFlags(Intent.FLAG_RECEIVER_EXPORTED)
+                addFlags(FLAG_RECEIVER_EXPORTED)
             }
 
             context.sendBroadcast(intent)
