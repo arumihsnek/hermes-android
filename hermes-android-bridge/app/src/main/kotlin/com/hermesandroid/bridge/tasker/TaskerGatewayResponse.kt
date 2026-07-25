@@ -93,10 +93,37 @@ data class TaskerGatewayResponse(
 
         /**
          * Build bytes for signing: everything except auth.
+         * Excludes the auth field entirely from the canonical form.
          */
         fun payloadForSigning(resp: TaskerGatewayResponse): ByteArray {
-            val unsigned = resp.copy(auth = Auth())
-            return TaskerGatewayAuthenticator.canonicalJson(unsigned)
+            val gson = com.google.gson.GsonBuilder().disableHtmlEscaping().create()
+            val element = com.google.gson.JsonParser.parseString(gson.toJson(resp))
+            if (element is com.google.gson.JsonObject) {
+                element.remove("auth")
+            }
+            val sorted = sortJsonKeys(element)
+            return sorted.toString().toByteArray(Charsets.UTF_8)
+        }
+
+        /**
+         * Recursively sort all JSON object keys.
+         */
+        private fun sortJsonKeys(element: com.google.gson.JsonElement): com.google.gson.JsonElement {
+            return when (element) {
+                is com.google.gson.JsonObject -> {
+                    val sorted = com.google.gson.JsonObject()
+                    element.entrySet().sortedBy { it.key }.forEach { (k, v) ->
+                        sorted.add(k, sortJsonKeys(v))
+                    }
+                    sorted
+                }
+                is com.google.gson.JsonArray -> {
+                    val sorted = com.google.gson.JsonArray()
+                    element.forEach { sorted.add(sortJsonKeys(it)) }
+                    sorted
+                }
+                else -> element
+            }
         }
 
         /**
