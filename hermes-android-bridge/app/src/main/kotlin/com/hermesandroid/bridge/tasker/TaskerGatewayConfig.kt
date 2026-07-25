@@ -1,7 +1,7 @@
 package com.hermesandroid.bridge.tasker
 
 import android.content.Context
-import android.util.Base64
+import java.util.Base64
 import java.security.SecureRandom
 
 /**
@@ -44,7 +44,7 @@ object TaskerGatewayConfig {
         // Generate 256-bit random secret
         val bytes = ByteArray(32)
         SecureRandom().nextBytes(bytes)
-        val secret = Base64.encodeToString(bytes, Base64.NO_WRAP)
+        val secret = Base64.getEncoder().encodeToString(bytes)
         prefs.edit().putString(KEY_SECRET, secret).commit()
         return secret
     }
@@ -65,7 +65,7 @@ object TaskerGatewayConfig {
     fun rotateSecret(context: Context): String {
         val bytes = ByteArray(32)
         SecureRandom().nextBytes(bytes)
-        val newSecret = Base64.encodeToString(bytes, Base64.NO_WRAP)
+        val newSecret = Base64.getEncoder().encodeToString(bytes)
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .edit().putString(KEY_SECRET, newSecret).commit()
         TaskerGatewayAuthenticator.configure(newSecret)

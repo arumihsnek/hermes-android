@@ -1,6 +1,6 @@
 package com.hermesandroid.bridge.tasker
 
-import android.util.Base64
+import java.util.Base64
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
 import com.google.gson.JsonArray
@@ -30,7 +30,7 @@ object TaskerGatewayAuthenticator {
      * Configure with Base64-encoded secret.
      */
     fun configure(base64Secret: String) {
-        secret = Base64.decode(base64Secret, Base64.NO_WRAP)
+        secret = Base64.getDecoder().decode(base64Secret)
     }
 
     /**
@@ -89,7 +89,7 @@ object TaskerGatewayAuthenticator {
         val key = secret ?: throw IllegalStateException("Secret not configured")
         val mac = Mac.getInstance("HmacSHA256")
         mac.init(SecretKeySpec(key, "HmacSHA256"))
-        return Base64.encodeToString(mac.doFinal(data), Base64.NO_WRAP)
+        return Base64.getEncoder().encodeToString(mac.doFinal(data))
     }
 
     /**
