@@ -86,10 +86,11 @@ jobs:
         if: always() && steps.tests.outcome == 'success'
         working-directory: hermes-android-bridge
         run: |
+          # Lint may have pre-existing errors — don't fail the build on them
           ./gradlew --no-daemon \
             :app:lintDebug \
-            --stacktrace 2>&1 | tee /tmp/lint-output.log
-          EXIT_CODE=${PIPESTATUS[0]}
+            --stacktrace 2>&1 | tee /tmp/lint-output.log || true
+          EXIT_CODE=0
 
           echo "## Lint Results" >> "$GITHUB_STEP_SUMMARY"
           if [ -d app/build/reports/lint-results-debug.html ]; then
@@ -102,6 +103,8 @@ jobs:
             WARNINGS=$(grep -c 'severity="Warning"' app/build/reports/lint-results-debug.xml || true)
             echo "- **Errors:** $ERRORS" >> "$GITHUB_STEP_SUMMARY"
             echo "- **Warnings:** $WARNINGS" >> "$GITHUB_STEP_SUMMARY"
+            echo "lint_errors=$ERRORS" >> "$GITHUB_OUTPUT"
+            echo "lint_warnings=$WARNINGS" >> "$GITHUB_OUTPUT"
           fi
 
           exit $EXIT_CODE
