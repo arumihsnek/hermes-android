@@ -1,0 +1,233 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Hermes · Command Gateway v1
+  
+  Tasker Project — Exportable XML
+  Date: 2026-07-25
+  Status: Scaffold — requires Tasker import + manual configuration
+  
+  IMPORTANT: This project does NOT contain secrets.
+  The HMAC secret must be set as Tasker local variable %gw_secret.
+-->
+<TaskerData>
+  <!-- Profile: Receives TASKER_GATEWAY_REQUEST_V1 broadcast -->
+  <Profile>
+    <cdate>1690000000000</cdate>
+    <edate>1690000000000</edate>
+    <id>1001</id>
+    <mid>2001</mid>
+    <nme>Hermes · Command Gateway v1</nme>
+    <!-- Event: BroadcastReceiver -->
+    <Event>
+      <Str sr="arg0" ve="3">com.hermesandroid.bridge.TASKER_GATEWAY_REQUEST_V1</Str>
+      <Str sr="arg1" ve="3">com.hermesandroid.bridge.tasker</Str>
+      <Str sr="arg2" ve="3"/>
+      <Int sr="arg3" val="0"/>
+    </Event>
+    <!-- Task: Validate + Dispatch + Respond -->
+    <Task>
+      <cdate>1690000000000</cdate>
+      <edate>1690000000000</edate>
+      <id>2001</id>
+      <nme>Hermes Gateway v1</nme>
+      
+      <!-- Action 0: Read request JSON from intent extra -->
+      <Action>
+        <Code>547</Code> <!-- JavaScriptlet -->
+        <Str sr="arg0" ve="3">
+// Read request from intent extra
+var requestJson = tasker.getIntent().getStringExtra("request_json");
+if (!requestJson) {
+  flash("No request_json in intent");
+  stop();
+}
+var request = JSON.parse(requestJson);
+
+// Store in local variables
+setLocal("gw_version", request.version);
+setLocal("gw_command_id", request.command_id);
+setLocal("gw_adapter_id", request.adapter_id);
+setLocal("gw_request_hash", request.request_hash);
+setLocal("gw_issued_at_ms", request.issued_at_ms);
+setLocal("gw_deadline_at_ms", request.deadline_at_ms);
+setLocal("gw_nonce", request.nonce);
+setLocal("gw_auth_sig", request.auth.signature);
+        </Str>
+        <Str sr="arg1" ve="3"/>
+        <Int sr="arg2" val="0"/>
+        <Int sr="arg3" val="0"/>
+      </Action>
+
+      <!-- Action 1: Validate version -->
+      <Action>
+        <Code>37</Code> <!-- If -->
+        <Str sr="arg0" ve="3">%gw_version</Str>
+        <Int sr="arg1" val="0"/>
+        <Str sr="arg2" ve="3">1</Str>
+        <Str sr="arg3" ve="3">equals</Str>
+      </Action>
+
+      <!-- Action 2: Reject invalid version -->
+      <Action>
+        <Code>547</Code>
+        <Str sr="arg0" ve="3">
+// Invalid version — build error response
+var resp = {
+  version: 1,
+  command_id: local("gw_command_id"),
+  adapter_id: local("gw_adapter_id"),
+  request_hash: local("gw_request_hash"),
+  ok: false,
+  status: "rejected",
+  error: { code: "INVALID_VERSION", message: "Version must be 1" },
+  auth: { algorithm: "HMAC-SHA256", signature: "" }
+};
+var gson = new com.google.gson.Gson();
+var intent = new Intent("com.hermesandroid.bridge.TASKER_GATEWAY_RESPONSE_V1");
+intent.setPackage("com.hermesandroid.bridge");
+intent.putExtra("response_json", gson.toJson(resp));
+context.sendBroadcast(intent);
+stop();
+        </Str>
+        <Str sr="arg1" ve="3"/>
+        <Int sr="arg2" val="0"/>
+        <Int sr="arg3" val="0"/>
+      </Action>
+
+      <!-- Action 3: Check deadline -->
+      <Action>
+        <Code>547</Code>
+        <Str sr="arg0" ve="3">
+// Check deadline
+var now = java.lang.System.currentTimeMillis();
+var deadline = parseInt(local("gw_deadline_at_ms"));
+if (now > deadline) {
+  var resp = {
+    version: 1,
+    command_id: local("gw_command_id"),
+    adapter_id: local("gw_adapter_id"),
+    request_hash: local("gw_request_hash"),
+    ok: false,
+    status: "rejected",
+    error: { code: "deadline_exceeded", message: "Request expired before execution" },
+    auth: { algorithm: "HMAC-SHA256", signature: "" }
+  };
+  var gson = new com.google.gson.Gson();
+  var intent = new Intent("com.hermesandroid.bridge.TASKER_GATEWAY_RESPONSE_V1");
+  intent.setPackage("com.hermesandroid.bridge");
+  intent.putExtra("response_json", gson.toJson(resp));
+  context.sendBroadcast(intent);
+  stop();
+}
+        </Str>
+        <Str sr="arg1" ve="3"/>
+        <Int sr="arg2" val="0"/>
+        <Int sr="arg3" val="0"/>
+      </Action>
+
+      <!-- Action 4: Static dispatch — ONLY device_owner.status.v1 -->
+      <Action>
+        <Code>37</Code> <!-- If -->
+        <Str sr="arg0" ve="3">%gw_adapter_id</Str>
+        <Int sr="arg1" val="0"/>
+        <Str sr="arg2" ve="3">device_owner.status.v1</Str>
+        <Str sr="arg3" ve="3">equals</Str>
+      </Action>
+
+      <!-- Action 5: Execute device_owner.status.v1 (STATIC, no eval) -->
+      <Action>
+        <Code>547</Code>
+        <Str sr="arg0" ve="3">
+// device_owner.status.v1 — STATIC adapter
+var startTime = java.lang.System.currentTimeMillis();
+var pkg = "net.dinglisch.android.taskerm";
+var receiver = pkg + ".MyDeviceAdminReceiver";
+var dpm = context.getSystemService("device_policy");
+var admin = new android.content.ComponentName(context, receiver);
+
+var result = {
+  is_device_owner: dpm.isDeviceOwnerApp(pkg),
+  package_name: pkg,
+  admin_receiver: receiver,
+  admin_active: dpm.isAdminActive(admin),
+  device_model: android.os.Build.MODEL,
+  android_version: "" + android.os.Build.VERSION.RELEASE,
+  sdk_version: android.os.Build.VERSION.SDK_INT,
+  kernel_version: java.lang.System.getProperty("os.version")
+};
+
+var completedAt = java.lang.System.currentTimeMillis();
+var resp = {
+  version: 1,
+  command_id: local("gw_command_id"),
+  adapter_id: "device_owner.status.v1",
+  request_hash: local("gw_request_hash"),
+  ok: true,
+  status: "completed",
+  received_at_ms: parseInt(local("gw_issued_at_ms")),
+  started_at_ms: startTime,
+  completed_at_ms: completedAt,
+  duration_ms: completedAt - startTime,
+  result: result,
+  executor: {
+    type: "tasker",
+    package_name: pkg,
+    process_uid: android.os.Process.myUid(),
+    process_pid: android.os.Process.myPid(),
+    task_name: "Hermes · Command Gateway"
+  },
+  error: null,
+  auth: { algorithm: "HMAC-SHA256", signature: "" }
+};
+
+// Sign response (HMAC)
+var respPayload = JSON.stringify(resp);
+var key = tasker.getVariable("gw_secret");
+var mac = javax.crypto.Mac.getInstance("HmacSHA256");
+var secretBytes = new java.lang.String(key).getBytes("UTF-8");
+var secretSpec = new javax.crypto.spec.SecretKeySpec(secretBytes, "HmacSHA256");
+mac.init(secretSpec);
+var sigBytes = mac.doFinal(respPayload.getBytes("UTF-8"));
+var sig = android.util.Base64.encodeToString(sigBytes, android.util.Base64.NO_WRAP);
+resp.auth.signature = sig;
+
+// Send response back to Bridge
+var gson = new com.google.gson.Gson();
+var intent = new Intent("com.hermesandroid.bridge.TASKER_GATEWAY_RESPONSE_V1");
+intent.setPackage("com.hermesandroid.bridge");
+intent.putExtra("response_json", gson.toJson(resp));
+context.sendBroadcast(intent);
+        </Str>
+        <Str sr="arg1" ve="3"/>
+        <Int sr="arg2" val="0"/>
+        <Int sr="arg3" val="0"/>
+      </Action>
+
+      <!-- Action 6: Unknown adapter — reject -->
+      <Action>
+        <Code>547</Code>
+        <Str sr="arg0" ve="3">
+// Unknown adapter — reject
+var resp = {
+  version: 1,
+  command_id: local("gw_command_id"),
+  adapter_id: local("gw_adapter_id"),
+  request_hash: local("gw_request_hash"),
+  ok: false,
+  status: "rejected",
+  error: { code: "UNKNOWN_ADAPTER", message: "Adapter not in allowlist: " + local("gw_adapter_id") },
+  auth: { algorithm: "HMAC-SHA256", signature: "" }
+};
+var gson = new com.google.gson.Gson();
+var intent = new Intent("com.hermesandroid.bridge.TASKER_GATEWAY_RESPONSE_V1");
+intent.setPackage("com.hermesandroid.bridge");
+intent.putExtra("response_json", gson.toJson(resp));
+context.sendBroadcast(intent);
+        </Str>
+        <Str sr="arg1" ve="3"/>
+        <Int sr="arg2" val="0"/>
+        <Int sr="arg3" val="0"/>
+      </Action>
+    </Task>
+  </Profile>
+</TaskerData>

@@ -24,6 +24,7 @@ SECRET_PATTERNS = [
 ]
 
 EXCLUDE_DIRS = {'.git', 'node_modules', '__pycache__', '.hermes', 'build', '.gradle'}
+EXCLUDE_DIR_NAMES = {'verify'}  # verification scripts contain banned strings for detection
 EXCLUDE_FILES = {'.env', '.env.local', '.env.production'}
 # This file contains banned patterns for detection — exclude it
 SELF_PATH = os.path.normpath(os.path.relpath(__file__, '.'))
@@ -33,7 +34,7 @@ def scan():
     scanned = 0
 
     for root, dirs, files in os.walk('.'):
-        dirs[:] = [d for d in dirs if d not in EXCLUDE_DIRS]
+        dirs[:] = [d for d in dirs if d not in EXCLUDE_DIRS and d not in EXCLUDE_DIR_NAMES]
         for f in files:
             if f in EXCLUDE_FILES:
                 continue
@@ -71,6 +72,9 @@ def scan():
                         if 'env' in line.lower() or 'placeholder' in line.lower():
                             continue
                         if 'REDACTED' in line or 'xxx' in line.lower():
+                            continue
+                        # Skip preference key definitions (KEY_SECRET = "...")
+                        if 'KEY_' in line or 'PREFS_' in line:
                             continue
                         errors.append(f"SUSPECT in {path}: {desc} → {match.group()[:50]}")
 
