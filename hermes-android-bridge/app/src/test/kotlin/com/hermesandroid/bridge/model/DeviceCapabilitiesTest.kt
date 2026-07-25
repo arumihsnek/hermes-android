@@ -8,12 +8,17 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
+import java.lang.reflect.Field
+import java.lang.reflect.Modifier
 
 class DeviceCapabilitiesTest {
 
     @Before
     fun setup() {
-        DeviceCapabilities.hasTelephony = false
+        // Use reflection to set private hasTelephony field
+        val field = DeviceCapabilities::class.java.getDeclaredField("hasTelephony")
+        field.isAccessible = true
+        field.setBoolean(DeviceCapabilities, false)
     }
 
     @Test
