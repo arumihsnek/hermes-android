@@ -15,6 +15,7 @@ class BridgeApplication : Application() {
         DeviceCapabilities.init(applicationContext)
         WakeLockManager.init(applicationContext)
         TerminalExecutor.init(applicationContext)
+        com.hermesandroid.bridge.tasker.TaskerGatewayClient.init(applicationContext)
 
         // HTTP server is debug-only; production uses intent-driven relay
         if (BuildConfig.DEBUG) {

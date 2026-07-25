@@ -9,6 +9,7 @@ import kotlinx.coroutines.withTimeout
  * High-level client: send request → await response.
  *
  * Enforces:
+ * - Provisioning state check (must be paired)
  * - Deadline before sending
  * - Deduplication (identical replay / conflict)
  * - HMAC verification
@@ -17,11 +18,32 @@ import kotlinx.coroutines.withTimeout
  *
  * No shell, no polling, no file I/O.
  */
-class TaskerGatewayClient(private val context: Context) {
+class TaskerGatewayClient private constructor(private val context: Context) {
 
     companion object {
         private const val TAG = "TaskerGatewayClient"
         private const val DEFAULT_TIMEOUT_MS = 10_000L
+
+        @Volatile
+        private var instance: TaskerGatewayClient? = null
+
+        /**
+         * Initialize with application context. Called from BridgeApplication.onCreate().
+         */
+        fun init(context: Context) {
+            if (instance == null) {
+                synchronized(this) {
+                    if (instance == null) {
+                        instance = TaskerGatewayClient(context.applicationContext)
+                    }
+                }
+            }
+        }
+
+        /**
+         * Get the singleton instance. Returns null if not initialized.
+         */
+        fun getInstance(): TaskerGatewayClient? = instance
     }
 
     private val pendingRegistry = PendingCommandRegistry()
@@ -47,6 +69,50 @@ class TaskerGatewayClient(private val context: Context) {
     }
 
     /**
+     * Check if the gateway is provisioned and ready to execute.
+     */
+    fun isReady(): Boolean = TaskerGatewayConfig.isProvisioned(context)
+
+    /**
+     * Get current provisioning state.
+     */
+    fun getPairingState(): TaskerGatewayConfig.PairingState =
+        TaskerGatewayConfig.getPairingState(context)
+
+    /**
+     * Get diagnostic execution counters (Phase 7 — temporary).
+     */
+    fun getExecutionCounters(): PendingCommandRegistry.ExecutionCounters =
+        pendingRegistry.getExecutionCounters()
+
+    /**
+     * Reset diagnostic execution counters.
+     */
+    fun resetExecutionCounters() {
+        pendingRegistry.resetCounters()
+    }
+
+    /**
+     * Check if Tasker is installed on the device.
+     */
+    fun isTaskerInstalled(): Boolean = TaskerGatewayTransport.isTaskerInstalled(context)
+
+    /**
+     * Start provisioning: send secret + challenge to Tasker.
+     * Requires explicit local action.
+     */
+    suspend fun provision(): TaskerGatewayProvisioner.ProvisionResult {
+        return TaskerGatewayProvisioner.provision(context)
+    }
+
+    /**
+     * Rotate the secret and re-provision.
+     */
+    suspend fun rotateAndReprovision(): TaskerGatewayProvisioner.ProvisionResult {
+        return TaskerGatewayProvisioner.rotateAndReprovision(context)
+    }
+
+    /**
      * Execute a command and await the response.
      * Enforces deadline, dedup, and timeout.
      */
@@ -55,6 +121,17 @@ class TaskerGatewayClient(private val context: Context) {
         params: Map<String, Any> = emptyMap(),
         timeoutMs: Long = DEFAULT_TIMEOUT_MS
     ): TaskerGatewayResponse {
+        // 0. Check provisioning state
+        if (!isReady()) {
+            return TaskerGatewayResponse.error(
+                commandId = "",
+                adapterId = adapterId,
+                requestHash = "",
+                code = "NOT_PROVISIONED",
+                message = "Gateway not provisioned. Call provision() first."
+            )
+        }
+
         // 1. Validate adapter exists in allowlist
         val adapterError = AdapterRegistry.validateAdapter(adapterId)
         if (adapterError != null) {
@@ -103,6 +180,7 @@ class TaskerGatewayClient(private val context: Context) {
 
         // 5. Check deadline right before sending
         if (System.currentTimeMillis() > request.deadline_at_ms) {
+            pendingRegistry.recordDeadlineExceeded()
             val error = TaskerGatewayResponse.error(
                 request.command_id, adapterId, request.request_hash,
                 "deadline_exceeded", "Request expired before execution"

@@ -475,6 +475,177 @@ fun Application.configureRouting() {
             call.respond(result)
         }
 
+        // ── Tasker Gateway v1 ──────────────────────────────────────────
+
+        post("/tasker_gateway/v1/execute") {
+            data class GatewayRequest(
+                val adapter_id: String,
+                val params: Map<String, Any> = emptyMap(),
+                val timeout_ms: Long = 5000
+            )
+            try {
+                val req = call.receive<GatewayRequest>()
+
+                // Validate adapter_id is provided
+                if (req.adapter_id.isBlank()) {
+                    call.respond(HttpStatusCode.BadRequest, mapOf(
+                        "ok" to false,
+                        "error" to mapOf(
+                            "code" to "MISSING_ADAPTER_ID",
+                            "message" to "adapter_id is required"
+                        )
+                    ))
+                    return@post
+                }
+
+                // Validate timeout
+                if (req.timeout_ms <= 0 || req.timeout_ms > 30_000) {
+                    call.respond(HttpStatusCode.BadRequest, mapOf(
+                        "ok" to false,
+                        "error" to mapOf(
+                            "code" to "INVALID_TIMEOUT",
+                            "message" to "timeout_ms must be between 1 and 30000"
+                        )
+                    ))
+                    return@post
+                }
+
+                // Execute via TaskerGatewayClient
+                val client = com.hermesandroid.bridge.tasker.TaskerGatewayClient.getInstance()
+                if (client == null) {
+                    call.respond(HttpStatusCode.ServiceUnavailable, mapOf(
+                        "ok" to false,
+                        "error" to mapOf(
+                            "code" to "NOT_INITIALIZED",
+                            "message" to "TaskerGatewayClient not initialized"
+                        )
+                    ))
+                    return@post
+                }
+
+                if (!client.isReady()) {
+                    call.respond(HttpStatusCode.ServiceUnavailable, mapOf(
+                        "ok" to false,
+                        "error" to mapOf(
+                            "code" to "NOT_PROVISIONED",
+                            "message" to "Tasker gateway not provisioned. POST /tasker_gateway/v1/provision first."
+                        )
+                    ))
+                    return@post
+                }
+
+                val response = client.execute(
+                    adapterId = req.adapter_id,
+                    params = req.params,
+                    timeoutMs = req.timeout_ms
+                )
+
+                // Convert response to map (avoid exposing raw auth)
+                val responseMap = mutableMapOf<String, Any>(
+                    "ok" to response.ok,
+                    "adapter_id" to response.adapter_id,
+                    "command_id" to response.command_id,
+                    "request_hash" to response.request_hash,
+                    "status" to response.status
+                )
+
+                if (response.ok && response.result != null) {
+                    responseMap["result"] = response.result
+                }
+
+                if (response.executor != null) {
+                    responseMap["executor"] = mapOf(
+                        "type" to response.executor.type,
+                        "process_uid" to response.executor.process_uid
+                    )
+                }
+
+                if (response.error != null) {
+                    responseMap["error"] = response.error
+                }
+
+                responseMap["duration_ms"] = response.duration_ms
+
+                val httpStatus = if (response.ok) HttpStatusCode.OK
+                    else HttpStatusCode.UnprocessableEntity
+
+                call.respond(httpStatus, responseMap)
+
+            } catch (e: Exception) {
+                val msg = e.message ?: "Unknown error"
+                call.respond(HttpStatusCode.InternalServerError, mapOf(
+                    "ok" to false,
+                    "error" to mapOf(
+                        "code" to "INTERNAL_ERROR",
+                        "message" to msg
+                    )
+                ))
+            }
+        }
+
+        post("/tasker_gateway/v1/provision") {
+            // Trigger provisioning: send secret + challenge to Tasker
+            try {
+                val client = com.hermesandroid.bridge.tasker.TaskerGatewayClient.getInstance()
+                if (client == null) {
+                    call.respond(HttpStatusCode.ServiceUnavailable, mapOf(
+                        "ok" to false,
+                        "error" to "TaskerGatewayClient not initialized"
+                    ))
+                    return@post
+                }
+
+                if (client.isReady()) {
+                    call.respond(mapOf(
+                        "ok" to true,
+                        "message" to "Already provisioned",
+                        "pairing_state" to client.getPairingState().name
+                    ))
+                    return@post
+                }
+
+                val result = client.provision()
+
+                call.respond(mapOf(
+                    "ok" to result.success,
+                    "pairing_id" to result.pairingId,
+                    "verified" to result.verified,
+                    "error" to result.error,
+                    "pairing_state" to client.getPairingState().name
+                ))
+            } catch (e: Exception) {
+                call.respond(HttpStatusCode.InternalServerError, mapOf(
+                    "ok" to false,
+                    "error" to e.message
+                ))
+            }
+        }
+
+        get("/tasker_gateway/v1/status") {
+            val client = com.hermesandroid.bridge.tasker.TaskerGatewayClient.getInstance()
+                ?: return@get call.respond(mapOf("error" to "Not initialized"))
+            call.respond(mapOf(
+                "pairing_state" to client.getPairingState().name,
+                "tasker_installed" to client.isTaskerInstalled(),
+                "allowed_adapters" to com.hermesandroid.bridge.tasker.AdapterRegistry.allowedIds().toList()
+            ))
+        }
+
+        get("/tasker_gateway/v1/counters") {
+            // Diagnostic counters for Phase 7 live dogfood
+            // Remove after verification is complete
+            val client = com.hermesandroid.bridge.tasker.TaskerGatewayClient.getInstance()
+                ?: return@get call.respond(mapOf("error" to "Not initialized"))
+            call.respond(client.getExecutionCounters().toMap())
+        }
+
+        post("/tasker_gateway/v1/counters/reset") {
+            val client = com.hermesandroid.bridge.tasker.TaskerGatewayClient.getInstance()
+                ?: return@post call.respond(mapOf("error" to "Not initialized"))
+            client.resetExecutionCounters()
+            call.respond(mapOf("ok" to true, "message" to "Counters reset"))
+        }
+
         post("/shell") {
             data class ShellRequest(
                 val command: String,

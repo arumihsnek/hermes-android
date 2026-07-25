@@ -86,11 +86,11 @@ jobs:
         if: always() && steps.tests.outcome == 'success'
         working-directory: hermes-android-bridge
         run: |
-          # Lint may have pre-existing errors — don't fail the build on them
+          # Lint baseline suppresses pre-existing errors; new errors fail the build
           ./gradlew --no-daemon \
             :app:lintDebug \
-            --stacktrace 2>&1 | tee /tmp/lint-output.log || true
-          EXIT_CODE=0
+            --stacktrace 2>&1 | tee /tmp/lint-output.log
+          EXIT_CODE=${PIPESTATUS[0]}
 
           echo "## Lint Results" >> "$GITHUB_STEP_SUMMARY"
           if [ -d app/build/reports/lint-results-debug.html ]; then
@@ -135,9 +135,9 @@ jobs:
       - name: Secret scan
         if: always()
         run: |
-          python3 tools/verify/no_secrets_in_repo.py 2>&1 || true
-          python3 tools/verify/tasker_gateway_security.py 2>&1 || true
-          python3 tools/verify/tasker_gateway_full_suite.py 2>&1 || true
+          python3 tools/verify/no_secrets_in_repo.py 2>&1
+          python3 tools/verify/tasker_gateway_security.py 2>&1
+          python3 tools/verify/tasker_gateway_full_suite.py 2>&1
 
       # --- Artifacts ---
 

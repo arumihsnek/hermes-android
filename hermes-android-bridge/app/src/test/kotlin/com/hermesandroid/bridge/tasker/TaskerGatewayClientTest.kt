@@ -103,7 +103,8 @@ class TaskerGatewayClientTest {
             "command_id_conflict" to "Reused command_id",
             "UNKNOWN_ADAPTER" to "Not in allowlist",
             "timeout" to "Bridge timeout",
-            "transport_error" to "Broadcast failed"
+            "transport_error" to "Broadcast failed",
+            "NOT_PROVISIONED" to "Gateway not provisioned"
         )
         for ((code, msg) in cases) {
             val resp = TaskerGatewayResponse.error(
@@ -112,5 +113,18 @@ class TaskerGatewayClientTest {
             assertFalse("Error $code should be !ok", resp.ok)
             assertEquals(code, resp.error?.code)
         }
+    }
+
+    @Test
+    fun `provisioning actions are defined`() {
+        assertNotNull(TaskerGatewayConfig.ACTION_PROVISION)
+        assertNotNull(TaskerGatewayConfig.ACTION_PROVISION_RESPONSE)
+        assertTrue(TaskerGatewayConfig.ACTION_PROVISION.contains("PROVISION"))
+        assertTrue(TaskerGatewayConfig.ACTION_PROVISION_RESPONSE.contains("PROVISION_RESPONSE"))
+    }
+
+    @Test
+    fun `provision window is 5 minutes`() {
+        assertEquals(5 * 60 * 1000L, TaskerGatewayConfig.PROVISION_WINDOW_MS)
     }
 }
