@@ -1,0 +1,184 @@
+name: Android CI — Tasker Gateway
+
+on:
+  push:
+    branches: [main, master, feat/tasker-java-executor-spike]
+    paths:
+      - 'hermes-android-bridge/**'
+      - 'tools/tasker_gateway*'
+      - 'tools/adapters/**'
+      - 'tools/verify/**'
+      - '.github/workflows/android-ci.yml'
+  pull_request:
+    branches: [main, master, feat/tasker-java-executor-spike]
+    paths:
+      - 'hermes-android-bridge/**'
+      - 'tools/tasker_gateway*'
+      - 'tools/adapters/**'
+      - 'tools/verify/**'
+      - '.github/workflows/android-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  GRADLE_OPTS: "-Dorg.gradle.daemon=false"
+
+jobs:
+  android-build:
+    name: Android Build & Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Record SHA
+        id: sha
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          validate-wrappers: false
+
+      - name: Make gradlew executable
+        working-directory: hermes-android-bridge
+        run: chmod +x gradlew
+
+      - name: Run unit tests
+        id: tests
+        working-directory: hermes-android-bridge
+        run: |
+          ./gradlew --no-daemon \
+            :app:testDebugUnitTest \
+            --stacktrace 2>&1 | tee /tmp/test-output.log
+          EXIT_CODE=${PIPESTATUS[0]}
+
+          # Parse JUnit XML results
+          echo "## Test Results" >> "$GITHUB_STEP_SUMMARY"
+          if [ -d app/build/test-results/testDebugUnitTest ]; then
+            TOTAL=$(grep -r 'tests=' app/build/test-results/testDebugUnitTest/ -h | head -1 | sed 's/.*tests="\([0-9]*\)".*/\1/')
+            FAILURES=$(grep -r 'failures=' app/build/test-results/testDebugUnitTest/ -h | head -1 | sed 's/.*failures="\([0-9]*\)".*/\1/')
+            ERRORS=$(grep -r 'errors=' app/build/test-results/testDebugUnitTest/ -h | head -1 | sed 's/.*errors="\([0-9]*\)".*/\1/')
+            SKIPPED=$(grep -r 'skipped=' app/build/test-results/testDebugUnitTest/ -h | head -1 | sed 's/.*skipped="\([0-9]*\)".*/\1/')
+            echo "- **Total:** ${TOTAL:-unknown}" >> "$GITHUB_STEP_SUMMARY"
+            echo "- **Failures:** ${FAILURES:-0}" >> "$GITHUB_STEP_SUMMARY"
+            echo "- **Errors:** ${ERRORS:-0}" >> "$GITHUB_STEP_SUMMARY"
+            echo "- **Skipped:** ${SKIPPED:-0}" >> "$GITHUB_STEP_SUMMARY"
+            echo "tests_total=${TOTAL:-0}" >> "$GITHUB_OUTPUT"
+            echo "tests_failed=${FAILURES:-0}" >> "$GITHUB_OUTPUT"
+            echo "tests_errors=${ERRORS:-0}" >> "$GITHUB_OUTPUT"
+            echo "tests_skipped=${SKIPPED:-0}" >> "$GITHUB_OUTPUT"
+          fi
+
+          echo "- **SHA:** ${{ steps.sha.outputs.sha }}" >> "$GITHUB_STEP_SUMMARY"
+          exit $EXIT_CODE
+
+      - name: Run lint
+        id: lint
+        if: always() && steps.tests.outcome == 'success'
+        working-directory: hermes-android-bridge
+        run: |
+          ./gradlew --no-daemon \
+            :app:lintDebug \
+            --stacktrace 2>&1 | tee /tmp/lint-output.log
+          EXIT_CODE=${PIPESTATUS[0]}
+
+          echo "## Lint Results" >> "$GITHUB_STEP_SUMMARY"
+          if [ -d app/build/reports/lint-results-debug.html ]; then
+            echo "- Lint report generated" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+          # Check for lint errors
+          if [ -f app/build/reports/lint-results-debug.xml ]; then
+            ERRORS=$(grep -c 'severity="Error"' app/build/reports/lint-results-debug.xml || true)
+            WARNINGS=$(grep -c 'severity="Warning"' app/build/reports/lint-results-debug.xml || true)
+            echo "- **Errors:** $ERRORS" >> "$GITHUB_STEP_SUMMARY"
+            echo "- **Warnings:** $WARNINGS" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+          exit $EXIT_CODE
+
+      - name: Build debug APK
+        id: build
+        if: always() && steps.tests.outcome == 'success'
+        working-directory: hermes-android-bridge
+        run: |
+          ./gradlew --no-daemon \
+            :app:assembleDebug \
+            --stacktrace 2>&1 | tee /tmp/build-output.log
+          EXIT_CODE=${PIPESTATUS[0]}
+
+          if [ $EXIT_CODE -eq 0 ] && [ -f app/build/outputs/apk/debug/app-debug.apk ]; then
+            APK_HASH=$(sha256sum app/build/outputs/apk/debug/app-debug.apk | cut -d' ' -f1)
+            APK_SIZE=$(stat -c%s app/build/outputs/apk/debug/app-debug.apk)
+            echo "## Build Results" >> "$GITHUB_STEP_SUMMARY"
+            echo "- **APK SHA-256:** \`$APK_HASH\`" >> "$GITHUB_STEP_SUMMARY"
+            echo "- **APK Size:** $(( APK_SIZE / 1024 )) KB" >> "$GITHUB_STEP_SUMMARY"
+            echo "- **SHA tested:** ${{ steps.sha.outputs.sha }}" >> "$GITHUB_STEP_SUMMARY"
+            echo "apk_hash=$APK_HASH" >> "$GITHUB_OUTPUT"
+            echo "apk_path=hermes-android-bridge/app/build/outputs/apk/debug/app-debug.apk" >> "$GITHUB_OUTPUT"
+          fi
+
+          exit $EXIT_CODE
+
+      - name: Secret scan
+        if: always()
+        run: |
+          python3 tools/verify/no_secrets_in_repo.py 2>&1 || true
+          python3 tools/verify/tasker_gateway_security.py 2>&1 || true
+          python3 tools/verify/tasker_gateway_full_suite.py 2>&1 || true
+
+      # --- Artifacts ---
+
+      - name: Upload debug APK
+        if: always() && steps.build.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-debug-${{ steps.sha.outputs.sha }}
+          path: hermes-android-bridge/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 30
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ steps.sha.outputs.sha }}
+          path: hermes-android-bridge/app/build/test-results/
+          retention-days: 30
+
+      - name: Upload test HTML reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports-${{ steps.sha.outputs.sha }}
+          path: hermes-android-bridge/app/build/reports/tests/
+          retention-days: 30
+
+      - name: Upload lint report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lint-report-${{ steps.sha.outputs.sha }}
+          path: |
+            hermes-android-bridge/app/build/reports/lint-results-debug.html
+            hermes-android-bridge/app/build/reports/lint-results-debug.xml
+          retention-days: 30
+
+      - name: Upload Gradle logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gradle-logs-${{ steps.sha.outputs.sha }}
+          path: |
+            /tmp/test-output.log
+            /tmp/lint-output.log
+            /tmp/build-output.log
+          retention-days: 7
