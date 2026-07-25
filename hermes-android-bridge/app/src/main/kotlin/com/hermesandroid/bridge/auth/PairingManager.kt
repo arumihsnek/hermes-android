@@ -67,6 +67,7 @@ object PairingManager {
      */
     fun validateToken(authHeader: String?): Boolean {
         if (authHeader == null) return false
+        if (!authHeader.startsWith("Bearer ")) return false
         val token = authHeader.removePrefix("Bearer ").trim()
         val expected = getCode()
         if (expected.isEmpty()) return false
