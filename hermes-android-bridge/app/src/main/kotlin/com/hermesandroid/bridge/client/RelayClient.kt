@@ -45,6 +45,12 @@ object RelayClient {
     private var reconnectJob: Job? = null
     private var prefs: SharedPreferences? = null
 
+    /** Pending Tasker results to forward when WebSocket reconnects */
+    private val pendingResults = java.util.concurrent.ConcurrentLinkedQueue<String>()
+
+    /** Lock for atomic ordering between queued and direct sends */
+    private val resultLock = Any()
+
     @Volatile
     var isConnected: Boolean = false
         private set
@@ -114,11 +120,54 @@ object RelayClient {
 
             override fun onOpen(webSocket: WebSocket, response: Response) {
                 Log.i(TAG, "WebSocket connected to ${buildWsUrl(serverUrl, "***")}")
-                isConnected = true
                 try {
                     BridgeAccessibilityService.instance?.startForeground()
                 } catch (e: SecurityException) {
                     Log.w(TAG, "Could not promote bridge service to foreground", e)
+                }
+                // Flush pending Tasker results BEFORE setting isConnected=true.
+                // The entire flush + isConnected toggle is guarded by resultLock
+                // so that concurrent sendTaskerResult() can atomically check
+                // queue state and connection flag.
+                synchronized(resultLock) {
+                    while (true) {
+                        val msg = pendingResults.peek() ?: break
+                        try {
+                            val sent = webSocket.send(msg)
+                            if (sent) {
+                                pendingResults.poll() // only remove on success
+                                Log.i(TAG, "Forwarded pending Tasker result")
+                            } else {
+                                Log.w(TAG, "Failed to forward pending Tasker result, keeping in queue")
+                                break // stop on first failure to preserve ordering
+                            }
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Failed to forward pending Tasker result, keeping in queue", e)
+                            break // stop on first failure to preserve ordering
+                        }
+                    }
+                    // Only now mark as connected so concurrent sendTaskerResult()
+                    // will see the flag and send directly — AFTER all queued results.
+                    isConnected = true
+                    // Second flush: catch anything queued between first flush and
+                    // isConnected=true (the window where sendTaskerResult() saw
+                    // isConnected==false and enqueued behind us).
+                    while (true) {
+                        val msg = pendingResults.peek() ?: break
+                        try {
+                            val sent = webSocket.send(msg)
+                            if (sent) {
+                                pendingResults.poll()
+                                Log.i(TAG, "Forwarded pending Tasker result (post-connect)")
+                            } else {
+                                Log.w(TAG, "Failed to forward pending Tasker result, keeping in queue")
+                                break
+                            }
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Failed to forward pending Tasker result, keeping in queue", e)
+                            break
+                        }
+                    }
                 }
                 notifyStatus(true, "Connected to $serverUrl")
             }
@@ -579,6 +628,48 @@ object RelayClient {
             else -> {
                 mapOf("error" to "Unknown command: $method $path") to 404
             }
+        }
+    }
+
+    /**
+     * Send a Tasker result message through the existing WebSocket connection.
+     * Used by [com.hermesandroid.bridge.tasker.TaskerResultReceiver] to forward
+     * validated Tasker results to the relay.
+     *
+     * @return true if the message was sent immediately, false if it was queued or failed.
+     */
+    fun sendTaskerResult(messageJson: String): Boolean {
+        // Entire method under resultLock (same lock as onOpen flush) to
+        // guarantee atomic ordering between enqueue and direct send decisions,
+        // including the webSocket null check.
+        synchronized(resultLock) {
+            val ws = webSocket
+            if (ws == null) {
+                Log.w(TAG, "Cannot send Tasker result: WebSocket not connected, queuing")
+                pendingResults.add(messageJson)
+                Log.i(TAG, "Queued Tasker result (queue size: ${pendingResults.size})")
+                return false
+            }
+            if (isConnected && pendingResults.isEmpty()) {
+                return try {
+                    val sent = ws.send(messageJson)
+                    if (sent) {
+                        Log.d(TAG, "Tasker result sent via WebSocket")
+                        true
+                    } else {
+                        Log.w(TAG, "WebSocket.send returned false, queuing")
+                        pendingResults.add(messageJson)
+                        false
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to send Tasker result: ${e.message}", e)
+                    pendingResults.add(messageJson)
+                    false
+                }
+            }
+            pendingResults.add(messageJson)
+            Log.i(TAG, "Queued Tasker result (queue size: ${pendingResults.size})")
+            return false
         }
     }
 

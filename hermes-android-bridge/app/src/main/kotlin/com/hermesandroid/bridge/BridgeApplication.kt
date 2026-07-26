@@ -1,11 +1,14 @@
 package com.hermesandroid.bridge
 
 import android.app.Application
+import com.hermesandroid.bridge.tasker.TaskerResultReceiver
+import com.hermesandroid.bridge.tasker.TaskerResultRegistry
 import com.hermesandroid.bridge.auth.PairingManager
 import com.hermesandroid.bridge.client.RelayClient
 import com.hermesandroid.bridge.model.DeviceCapabilities
 import com.hermesandroid.bridge.power.WakeLockManager
 import com.hermesandroid.bridge.server.BridgeServer
+import com.hermesandroid.bridge.server.TaskerResultHttpHandler
 import com.hermesandroid.bridge.executor.TerminalExecutor
 
 class BridgeApplication : Application() {
@@ -24,5 +27,10 @@ class BridgeApplication : Application() {
 
         // Relay is on-demand via Intent. Do NOT auto-connect here.
         RelayClient.init(applicationContext)
+
+        // Initialize Tasker result receiver registry
+        val resultRegistry = TaskerResultRegistry()
+        TaskerResultReceiver.registry = resultRegistry
+        TaskerResultHttpHandler.registry = resultRegistry
     }
 }

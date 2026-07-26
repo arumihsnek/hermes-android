@@ -58,10 +58,14 @@ object BridgeServer {
             }
             configureRouting()
         }.also { it.start(wait = false) }
+
+        // Start loopback-only Tasker result endpoint
+        TaskerResultHttpHandler.start()
     }
 
     fun stop() {
         server?.stop(1000, 2000)
         server = null
+        TaskerResultHttpHandler.stop()
     }
 }
