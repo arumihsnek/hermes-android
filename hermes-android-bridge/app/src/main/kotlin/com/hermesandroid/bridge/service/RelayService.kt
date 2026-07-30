@@ -6,10 +6,9 @@ import android.app.NotificationManager
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
-import android.os.Handler
-import android.os.Looper
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.hermesandroid.bridge.client.RelayClient
@@ -19,7 +18,8 @@ import com.hermesandroid.bridge.client.RelayClient
  *
  * Started via [RelayIntentReceiver.ACTION_START] broadcast.
  * Wraps [RelayClient.connect] / [RelayClient.disconnect].
- * Auto-stops after [IDLE_TIMEOUT_MS] of no commands.
+ * Runs as foreground service (persistent notification) so the system
+ * doesn't kill it. Notification updates on connect/disconnect events.
  */
 class RelayService : Service() {
 
@@ -33,7 +33,6 @@ class RelayService : Service() {
         private const val TAG = "RelayService"
         private const val NOTIFICATION_ID = 1001
         private const val CHANNEL_ID = "bridge-relay"
-        private const val IDLE_TIMEOUT_MS = 300_000L
 
         @Volatile
         var instance: RelayService? = null
@@ -54,11 +53,11 @@ class RelayService : Service() {
 
     private var serverAddress: String = ""
     private var relayToken: String = ""
-    private val idleHandler = Handler(Looper.getMainLooper())
 
     override fun onCreate() {
         super.onCreate()
         instance = this
+        createNotificationChannel()
         Log.d(TAG, "RelayService created")
     }
 
@@ -74,13 +73,18 @@ class RelayService : Service() {
                 connectRelay()
             }
         }
-        resetIdleTimer()
+        val notification = buildNotification("Connecting to $serverAddress...")
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
+        } else {
+            @Suppress("DEPRECATION")
+            startForeground(NOTIFICATION_ID, notification)
+        }
         return START_STICKY
     }
 
     override fun onDestroy() {
         Log.d(TAG, "RelayService destroyed")
-        idleHandler.removeCallbacksAndMessages(null)
         RelayClient.disconnect()
         instance = null
         super.onDestroy()
@@ -116,29 +120,22 @@ class RelayService : Service() {
 
     private fun connectRelay() {
         RelayClient.init(this)
-        // Chain: preserve existing callback (UI) and add notification callback
+        // Chain: preserve existing callback (UI) and add notification update
         val existingCallback = RelayClient.onStatusChanged
-        val handler = Handler(Looper.getMainLooper())
+        val handler = android.os.Handler(android.os.Looper.getMainLooper())
         RelayClient.onStatusChanged = { connected, msg ->
-            // Chain to existing callback (UI update)
             existingCallback?.invoke(connected, msg)
-            // Run notification update on main thread
             handler.post {
                 val text = if (connected) "Connected to $serverAddress" else msg
-                try {
-                    val nm = getSystemService(android.app.NotificationManager::class.java)
-                    nm?.notify(NOTIFICATION_ID, buildNotification(text))
-                } catch (_: Exception) {}
+                val notif = buildNotification(text)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    startForeground(NOTIFICATION_ID, notif, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
+                } else {
+                    @Suppress("DEPRECATION")
+                    startForeground(NOTIFICATION_ID, notif)
+                }
             }
         }
         RelayClient.connect(serverAddress, relayToken)
-    }
-
-    private fun resetIdleTimer() {
-        idleHandler.removeCallbacksAndMessages(null)
-        idleHandler.postDelayed({
-            Log.d(TAG, "Idle timeout reached, stopping")
-            stopSelf()
-        }, IDLE_TIMEOUT_MS)
     }
 }

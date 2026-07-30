@@ -68,10 +68,18 @@
             </intent-filter>
         </receiver>
 
+        <!-- Tasker v2.1.x result receiver — retained for diagnostic/monitoring only.
+             All result submission goes through HTTP loopback to TaskerResultHttpHandler.
+             The receiver is NOT exported so no external app can reach it. -->
+        <receiver
+            android:name=".tasker.TaskerResultReceiver"
+            android:exported="false" />
+
         <!-- Foreground service for relay connection lifecycle -->
         <service
             android:name=".service.RelayService"
-            android:exported="false" />
+            android:exported="false"
+            android:foregroundServiceType="specialUse" />
 
         <!-- Accessibility service declaration -->
         <service
@@ -105,6 +113,15 @@
             android:enabled="true"
             android:exported="true"
             android:permission="android.permission.INTERACT_ACROSS_USERS_FULL" />
+
+        <!-- Tasker result ContentProvider — accepts result envelopes via Binder IPC,
+             bypassing Android 14 localhost network restrictions. Tasker JavaScriptlet
+             uses context.getContentResolver().insert(...) to submit results. -->
+        <provider
+            android:name=".server.TaskerResultContentProvider"
+            android:authorities="${applicationId}.taskerresult"
+            android:exported="true"
+            android:enabled="true" />
 
     </application>
 </manifest>

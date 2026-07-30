@@ -112,6 +112,7 @@ class MainActivity : Activity() {
         updatePermissionSwitches()
         maybeRequestShizukuPermission()
         autoGrantPermissionsFromPrefs()
+        tryAutoConnectRelay()
     }
 
     /** Try to auto-grant permissions that the user has toggled ON. */
@@ -264,11 +265,7 @@ class MainActivity : Activity() {
             etServerUrl.setText("82.70.86.174:18766")
         }
         
-        // Auto-connect if preference enabled
-        if (autoConnect && savedUrl.isNullOrBlank().not() && !RelayClient.isConnected) {
-            val code = PairingManager.getCode()
-            RelayService.start(this, savedUrl ?: "82.70.86.174:18766", code)
-        }
+        tryAutoConnectRelay()
         
         RelayClient.onStatusChanged = { connected, message ->
             tvRelayStatus.text = message
@@ -305,6 +302,17 @@ class MainActivity : Activity() {
         }
 
         updateRelayButton()
+    }
+
+    /** Auto-connect to relay if preference is on, URL is saved, and not already connected. */
+    private fun tryAutoConnectRelay() {
+        if (RelayClient.isConnected) return
+        val prefs = getSharedPreferences("hermes_bridge_prefs", MODE_PRIVATE)
+        if (!prefs.getBoolean("auto_connect_relay", false)) return
+        val savedUrl = RelayClient.serverUrl
+        if (savedUrl.isNullOrBlank()) return
+        val code = PairingManager.getCode()
+        RelayService.start(this, savedUrl, code)
     }
 
     private fun updateRelayButton() {
